@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Evita que Windows "estire" la ventana (texto/grilla borrosos) cuando la
+         corremos en un monitor con DPI distinto al principal o la arrastramos
+         entre monitores con distinto zoom. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <AssemblyName>ST2 - Herramientas SQL</AssemblyName>
+    <Product>ST2 - Herramientas SQL</Product>
+    <AssemblyTitle>ST2 - Herramientas SQL</AssemblyTitle>
+    <!-- Icono del .exe: colocar SBBackup\Assets\app.ico (ver instrucciones al usuario) -->
+    <ApplicationIcon Condition="Exists('$(MSBuildProjectDirectory)\Assets\app.ico')">Assets\app.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- Publicación: un solo .exe, sin .NET instalado en la PC del usuario -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <!-- El .exe publicado queda directamente en ...\ST2 - Herramientas SQL\publish\ -->
+    <PublishDir>$(MSBuildProjectDirectory)\..\publish\</PublishDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
