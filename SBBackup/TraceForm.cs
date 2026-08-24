@@ -49,7 +49,7 @@ public sealed class TraceForm : Form
     public TraceForm()
     {
         Text = "ST2 · Traza SQL";
-        AutoScaleMode = AutoScaleMode.Dpi;
+        UiTheme.ApplyDpiAwareScaling(this);
         Font = UiTheme.UiFont();
         BackColor = UiTheme.AppBack;
         StartPosition = FormStartPosition.CenterScreen;

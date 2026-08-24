@@ -268,8 +268,9 @@ public sealed class QueryAiExplainer : IDisposable
     }
 
     /// <summary>
-    /// Configuración de IA. Endpoint y modelo tienen defaults públicos; la API key
-    /// se lee de appsettings.local.json (junto al .exe o en %LocalAppData%\ST2).
+    /// Configuración de IA. Trae valores por defecto embebidos (para que funcione en cualquier PC
+    /// sin archivos extra) y, si existe un appsettings.local.json (junto al .exe o en %LocalAppData%\ST2),
+    /// esos valores tienen prioridad para poder cambiar la key sin recompilar.
     /// </summary>
     private sealed class AiSettings
     {

@@ -58,9 +58,6 @@ internal sealed class NavRowControl : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-
         var parentBg = Parent?.BackColor ?? UiTheme.Surface;
         using (var clear = new SolidBrush(parentBg))
             g.FillRectangle(clear, ClientRectangle);
@@ -70,13 +67,27 @@ internal sealed class NavRowControl : Control
         var rect = new Rectangle(padX, padY, Width - padX * 2 - 1, Height - padY * 2 - 1);
         if (rect.Width > 8 && rect.Height > 8)
         {
-            using var path = UiTheme.RoundedRectangle(rect, UiTheme.ScaledCornerRadius(this, 8));
+            var sharp = UiTheme.UseSharpRects(this);
+            UiTheme.ConfigureCrispGraphics(g, this, curves: !sharp);
             using var fill = new SolidBrush(_hover ? UiTheme.PrimarySoft : Color.FromArgb(250, 251, 252));
-            g.FillPath(fill, path);
-            if (_hover)
+            if (sharp)
             {
-                using var pen = new Pen(UiTheme.Primary, 1f);
-                g.DrawPath(pen, path);
+                g.FillRectangle(fill, rect);
+                if (_hover)
+                {
+                    using var pen = new Pen(UiTheme.Primary, UiTheme.BorderWidth(this));
+                    g.DrawRectangle(pen, rect);
+                }
+            }
+            else
+            {
+                using var path = UiTheme.RoundedRectangle(rect, UiTheme.ScaledCornerRadius(this, 8));
+                g.FillPath(fill, path);
+                if (_hover)
+                {
+                    using var pen = new Pen(UiTheme.Primary, UiTheme.BorderWidth(this));
+                    g.DrawPath(pen, path);
+                }
             }
         }
 

@@ -2,6 +2,7 @@
 bin/
 obj/
 publish/
+publish_nuevo/
 *.zip
 
 # Config local con credenciales

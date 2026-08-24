@@ -7,6 +7,7 @@ internal sealed class RoundedActionButton : Button
 {
     private Color _normal = UiTheme.Primary;
     private Color _hover = UiTheme.PrimaryDark;
+    private Color _border = Color.Transparent;
     private bool _hovering;
 
     public RoundedActionButton()
@@ -26,13 +27,15 @@ internal sealed class RoundedActionButton : Button
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
         MinimumSize = new Size(0, 36);
-        UseCompatibleTextRendering = true;
+        UseCompatibleTextRendering = false;
     }
 
-    public void SetColors(Color normal, Color hover)
+    public void SetColors(Color normal, Color hover, Color? border = null)
     {
         _normal = normal;
         _hover = hover;
+        if (border.HasValue)
+            _border = border.Value;
         Invalidate();
     }
 
@@ -59,9 +62,6 @@ internal sealed class RoundedActionButton : Button
     protected override void OnPaint(PaintEventArgs pevent)
     {
         var g = pevent.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-
         var parentBg = Parent?.BackColor ?? UiTheme.AppBack;
         using (var clear = new SolidBrush(parentBg))
             g.FillRectangle(clear, ClientRectangle);
@@ -76,12 +76,31 @@ internal sealed class RoundedActionButton : Button
                 ? _hover
                 : _normal;
 
-        using var path = UiTheme.RoundedRectangle(rect, UiTheme.ScaledCornerRadius(this, 10));
+        var sharp = UiTheme.UseSharpRects(this);
+        UiTheme.ConfigureCrispGraphics(g, this, curves: !sharp);
         using var brush = new SolidBrush(fill);
-        g.FillPath(brush, path);
+        if (sharp)
+        {
+            g.FillRectangle(brush, rect);
+            if (_border.A > 0)
+            {
+                using var pen = new Pen(_border, Math.Max(2f, UiTheme.BorderWidth(this)));
+                g.DrawRectangle(pen, rect);
+            }
+        }
+        else
+        {
+            using var path = UiTheme.RoundedRectangle(rect, UiTheme.ScaledCornerRadius(this, 8));
+            g.FillPath(brush, path);
+            if (_border.A > 0)
+            {
+                using var pen = new Pen(_border, Math.Max(2f, UiTheme.BorderWidth(this)));
+                g.DrawPath(pen, path);
+            }
+        }
 
         var flags = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter |
-                    TextFormatFlags.EndEllipsis | TextFormatFlags.WordEllipsis;
-        TextRenderer.DrawText(g, Text, Font, rect, Enabled ? ForeColor : UiTheme.TextMuted, flags);
+                    TextFormatFlags.EndEllipsis | TextFormatFlags.NoPadding;
+        TextRenderer.DrawText(g, Text, Font, ClientRectangle, Enabled ? ForeColor : UiTheme.TextMuted, flags);
     }
 }

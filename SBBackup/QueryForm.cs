@@ -61,7 +61,7 @@ public sealed class QueryForm : Form
     {
         _bejermanCatalog = new BejermanDatabaseCatalogBuilder(_config);
         Text = "ST2 · Aplicar Script/Query";
-        AutoScaleMode = AutoScaleMode.Dpi;
+        UiTheme.ApplyDpiAwareScaling(this);
         Font = UiTheme.UiFont();
         BackColor = UiTheme.AppBack;
         StartPosition = FormStartPosition.CenterScreen;
@@ -1810,7 +1810,8 @@ public sealed class QueryForm : Form
             ShowInTaskbar = false,
             BackColor = UiTheme.AppBack,
             Font = UiTheme.UiFont(),
-            AutoScaleMode = AutoScaleMode.Dpi
+            AutoScaleMode = AutoScaleMode.Dpi,
+            AutoScaleDimensions = new SizeF(96F, 96F)
         };
 
         var root = new TableLayoutPanel

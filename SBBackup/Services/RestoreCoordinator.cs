@@ -25,6 +25,12 @@ public sealed class RestoreCoordinator
         public int DataFiles { get; set; }
         public int LogFiles { get; set; }
         public string? PeekNote { get; set; }
+        /// <summary>Collation de la base dentro del .bak (RESTORE HEADERONLY).</summary>
+        public string? BackupCollation { get; set; }
+        /// <summary>Collation de la instancia destino (SERVERPROPERTY).</summary>
+        public string? InstanceCollation { get; set; }
+        /// <summary>true = coinciden; false = distintas; null = no se pudo comparar.</summary>
+        public bool? CollationMatches { get; set; }
     }
 
     public sealed class RestorePlanItem
@@ -35,6 +41,9 @@ public sealed class RestoreCoordinator
         public required string DatabaseName { get; init; }
         public bool DatabaseExists { get; init; }
         public List<BackupFileEntry> Files { get; init; } = [];
+        public string? BackupCollation { get; set; }
+        public string? InstanceCollation { get; set; }
+        public bool? CollationMatches { get; set; }
     }
 
     public sealed class RestoreProgress
@@ -58,11 +67,16 @@ public sealed class RestoreCoordinator
             await using var conn = new SqlConnection(builder.ConnectionString);
             await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
 
+            preview.InstanceCollation = await ReadInstanceCollationAsync(conn, cancellationToken)
+                .ConfigureAwait(false);
+
             if (!await TryPopulateHeaderAsync(conn, localBakPath, preview, cancellationToken).ConfigureAwait(false))
             {
                 preview.PeekNote = "SQL no puede leer el archivo desde esta ruta; se analizará al restaurar.";
                 return preview;
             }
+
+            ApplyCollationComparison(preview);
 
             var files = await ReadFileListAsync(masterConnectionString, localBakPath, cancellationToken).ConfigureAwait(false);
             preview.DataFiles = files.Count(f => !string.Equals(f.Type, "L", StringComparison.OrdinalIgnoreCase));
@@ -100,11 +114,22 @@ public sealed class RestoreCoordinator
 
         try
         {
-            var dbName = await ReadDatabaseNameAsync(masterConnectionString, serverRead, cancellationToken).ConfigureAwait(false);
+            var header = await ReadHeaderAsync(masterConnectionString, serverRead, cancellationToken)
+                .ConfigureAwait(false);
+            var dbName = header.DatabaseName;
             var files = await ReadFileListAsync(masterConnectionString, serverRead, cancellationToken).ConfigureAwait(false);
             var exists = await DatabaseExistsAsync(masterConnectionString, dbName, cancellationToken).ConfigureAwait(false);
+            var instanceCollation = await GetInstanceCollationAsync(masterConnectionString, cancellationToken)
+                .ConfigureAwait(false);
+            var matches = CompareCollations(header.Collation, instanceCollation);
 
             log.Report($"{fileName}: base detectada «{dbName}» — {(exists ? "YA EXISTE, se sobrescribirá" : "no existe, se creará")}.");
+            if (!string.IsNullOrWhiteSpace(header.Collation) || !string.IsNullOrWhiteSpace(instanceCollation))
+            {
+                log.Report(
+                    $"{fileName}: collation backup «{header.Collation ?? "?"}» · instancia «{instanceCollation ?? "?"}» · " +
+                    (matches == true ? "coinciden" : matches == false ? "NO coinciden" : "no se pudo comparar"));
+            }
 
             return new RestorePlanItem
             {
@@ -113,7 +138,10 @@ public sealed class RestoreCoordinator
                 ClientCleanupPath = cleanup,
                 DatabaseName = dbName,
                 DatabaseExists = exists,
-                Files = files
+                Files = files,
+                BackupCollation = header.Collation,
+                InstanceCollation = instanceCollation,
+                CollationMatches = matches
             };
         }
         catch
@@ -388,6 +416,7 @@ public sealed class RestoreCoordinator
             preview.BackupSizeBytes = GetLongOrNull(r, "BackupSize");
             preview.Compressed = GetIntOrNull(r, "Compressed") == 1;
             preview.BackupServerName = GetStringOrNull(r, "ServerName");
+            preview.BackupCollation = GetStringOrNull(r, "Collation")?.Trim();
             return true;
         }
         catch (SqlException)
@@ -456,6 +485,17 @@ public sealed class RestoreCoordinator
 
     private static async Task<string> ReadDatabaseNameAsync(string connectionString, string path, CancellationToken cancellationToken)
     {
+        var header = await ReadHeaderAsync(connectionString, path, cancellationToken).ConfigureAwait(false);
+        return header.DatabaseName;
+    }
+
+    private sealed record BackupHeaderInfo(string DatabaseName, string? Collation);
+
+    private static async Task<BackupHeaderInfo> ReadHeaderAsync(
+        string connectionString,
+        string path,
+        CancellationToken cancellationToken)
+    {
         var builder = new SqlConnectionStringBuilder(connectionString) { InitialCatalog = "master" };
         await using var conn = new SqlConnection(builder.ConnectionString);
         await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
@@ -466,11 +506,52 @@ public sealed class RestoreCoordinator
         if (!await r.ReadAsync(cancellationToken).ConfigureAwait(false))
             throw new InvalidOperationException("El archivo no contiene un backup válido.");
 
-        var ord = r.GetOrdinal("DatabaseName");
-        var name = r.IsDBNull(ord) ? "" : Convert.ToString(r.GetValue(ord))?.Trim() ?? "";
+        var name = GetStringOrNull(r, "DatabaseName")?.Trim() ?? "";
         if (string.IsNullOrEmpty(name))
             throw new InvalidOperationException("No se pudo leer el nombre de la base desde el backup.");
-        return name;
+
+        return new BackupHeaderInfo(name, GetStringOrNull(r, "Collation")?.Trim());
+    }
+
+    private static async Task<string?> ReadInstanceCollationAsync(SqlConnection conn, CancellationToken cancellationToken)
+    {
+        await using var cmd = new SqlCommand(
+            "SELECT CAST(SERVERPROPERTY('Collation') AS nvarchar(256));",
+            conn)
+        { CommandTimeout = 30 };
+        var o = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return o as string;
+    }
+
+    private static async Task<string?> GetInstanceCollationAsync(
+        string masterConnectionString,
+        CancellationToken cancellationToken)
+    {
+        var builder = new SqlConnectionStringBuilder(masterConnectionString) { InitialCatalog = "master" };
+        await using var conn = new SqlConnection(builder.ConnectionString);
+        await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+        return await ReadInstanceCollationAsync(conn, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void ApplyCollationComparison(RestoreFilePreview preview)
+    {
+        preview.CollationMatches = CompareCollations(preview.BackupCollation, preview.InstanceCollation);
+        if (preview.CollationMatches == false)
+        {
+            preview.PeekNote =
+                $"Collation distinta: backup «{preview.BackupCollation}» ≠ instancia «{preview.InstanceCollation}».";
+        }
+    }
+
+    internal static bool? CompareCollations(string? backupCollation, string? instanceCollation)
+    {
+        if (string.IsNullOrWhiteSpace(backupCollation) || string.IsNullOrWhiteSpace(instanceCollation))
+            return null;
+
+        return string.Equals(
+            backupCollation.Trim(),
+            instanceCollation.Trim(),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<List<BackupFileEntry>> ReadFileListAsync(string connectionString, string path, CancellationToken cancellationToken)

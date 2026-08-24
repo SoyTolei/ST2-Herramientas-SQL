@@ -16,6 +16,7 @@ static class Program
             return;
         }
 
+        Application.SetCompatibleTextRenderingDefault(false);
         ApplicationConfiguration.Initialize();
         Application.Run(new HomeForm());
     }

@@ -39,6 +39,7 @@ internal static class CardSection
         };
         card.Paint += PaintCardBorder;
         content.Dock = DockStyle.Fill;
+        content.BackColor = Color.Transparent;
         card.Controls.Add(content);
         outer.Controls.Add(card, 0, 1);
         return outer;
@@ -201,6 +202,7 @@ internal static class CardSection
         card.Paint += PaintCardBorder;
         content.Dock = DockStyle.Fill;
         content.AutoSize = false;
+        content.BackColor = Color.Transparent;
         if (content is TableLayoutPanel grid)
             grid.AutoSize = false;
         card.Controls.Add(content);
@@ -212,13 +214,29 @@ internal static class CardSection
         if (sender is not Panel panel)
             return;
 
-        e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        var g = e.Graphics;
+        var parentBg = panel.Parent?.BackColor ?? UiTheme.AppBack;
+        using (var bg = new SolidBrush(parentBg))
+            g.FillRectangle(bg, panel.ClientRectangle);
+
         var rect = new Rectangle(0, 0, panel.Width - 1, panel.Height - 1);
-        if (rect.Width <= 2 || rect.Height <= 2)
+        if (rect.Width <= 4 || rect.Height <= 4)
             return;
 
-        using var path = UiTheme.RoundedRectangle(rect, 12);
-        using var pen = new Pen(UiTheme.Border, 1f);
-        e.Graphics.DrawPath(pen, path);
+        var sharp = UiTheme.UseSharpRects(panel);
+        UiTheme.ConfigureCrispGraphics(g, panel, curves: !sharp);
+        using var fill = new SolidBrush(UiTheme.Surface);
+        using var pen = new Pen(UiTheme.Border, UiTheme.BorderWidth(panel));
+        if (sharp)
+        {
+            g.FillRectangle(fill, rect);
+            g.DrawRectangle(pen, rect);
+            return;
+        }
+
+        var radius = UiTheme.ScaledCornerRadius(panel, 10);
+        using var path = UiTheme.RoundedRectangle(rect, radius);
+        g.FillPath(fill, path);
+        g.DrawPath(pen, path);
     }
 }

@@ -61,8 +61,56 @@ internal static class UiTheme
     internal static Size ScaleSize(Control control, int logicalWidth, int logicalHeight) =>
         new(Scale(control, logicalWidth), Scale(control, logicalHeight));
 
+    /// <summary>
+    /// Formularios creados a mano: si se pone AutoScaleMode.Dpi sin AutoScaleDimensions = 96×96,
+    /// WinForms usa 6×13 (modo Font) como base y el layout queda borroso / deformado.
+    /// </summary>
+    internal static void ApplyDpiAwareScaling(Form form)
+    {
+        form.AutoScaleDimensions = new SizeF(96F, 96F);
+        form.AutoScaleMode = AutoScaleMode.Dpi;
+    }
+
     internal static int ScaledCornerRadius(Control control, int logicalRadius = ButtonCornerRadius) =>
         Math.Max(2, Scale(control, logicalRadius));
+
+    /// <summary>
+    /// 125/150/175% (DPI 120/144/168): las curvas GDI+ de 1 px se ven sucias.
+    /// En esos monitores dibujamos rectos, alineados al píxel.
+    /// </summary>
+    internal static bool UseSharpRects(Control control)
+    {
+        try
+        {
+            if (control.IsHandleCreated)
+                return control.DeviceDpi is 120 or 144 or 168;
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return false;
+    }
+
+    internal static void ConfigureCrispGraphics(Graphics g, Control control, bool curves)
+    {
+        g.CompositingQuality = CompositingQuality.HighQuality;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+        if (!curves || UseSharpRects(control))
+        {
+            g.SmoothingMode = SmoothingMode.None;
+            g.PixelOffsetMode = PixelOffsetMode.None;
+        }
+        else
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+        }
+    }
+
+    internal static float BorderWidth(Control control) =>
+        Math.Max(1f, DpiScaleFactor(control) >= 1.5f ? 2f : 1f);
 
     internal static Font UiFont(float size = 10f, FontStyle style = FontStyle.Regular) =>
         new("Segoe UI", size, style, GraphicsUnit.Point);
@@ -197,13 +245,28 @@ internal static class UiTheme
         b.AutoSize = false;
         b.Height = 44;
         b.MinimumSize = new Size(0, 44);
-        b.MaximumSize = new Size(10000, 44);
         b.Dock = DockStyle.Fill;
         b.Margin = primary ? new Padding(0, 0, 0, 6) : new Padding(0);
         b.Font = UiFont(10.25f, FontStyle.Bold);
-        b.UseCompatibleTextRendering = true;
+        b.UseCompatibleTextRendering = false;
         b.Cursor = Cursors.Hand;
         b.Padding = new Padding(14, 10, 14, 10);
+
+        if (b is RoundedActionButton rounded)
+        {
+            if (primary)
+            {
+                rounded.SetColors(Primary, PrimaryDark, Color.Transparent);
+                rounded.ForeColor = Color.White;
+            }
+            else
+            {
+                rounded.SetColors(Surface, PrimarySoft, Primary);
+                rounded.ForeColor = PrimaryDark;
+            }
+            return;
+        }
+
         b.FlatStyle = FlatStyle.Flat;
         b.UseVisualStyleBackColor = false;
         b.FlatAppearance.BorderSize = 1;
@@ -234,7 +297,7 @@ internal static class UiTheme
         b.MaximumSize = new Size(10000, 32);
         b.Dock = DockStyle.Fill;
         b.Font = UiFont(8.75f, FontStyle.Bold);
-        b.UseCompatibleTextRendering = true;
+        b.UseCompatibleTextRendering = false;
         b.Cursor = Cursors.Hand;
         b.Padding = new Padding(12, 6, 12, 6);
         b.FlatStyle = FlatStyle.Flat;
@@ -271,7 +334,7 @@ internal static class UiTheme
         b.Margin = new Padding(0, 2, 0, 2);
         b.AutoSize = false;
         b.UseVisualStyleBackColor = false;
-        b.UseCompatibleTextRendering = true;
+        b.UseCompatibleTextRendering = false;
         b.MouseEnter += (_, _) => b.BackColor = ConnectDark;
         b.MouseLeave += (_, _) => b.BackColor = Connect;
     }
@@ -293,7 +356,7 @@ internal static class UiTheme
         b.Margin = new Padding(12, 0, 0, 0);
         b.Padding = new Padding(6, 4, 6, 4);
         b.UseVisualStyleBackColor = false;
-        b.UseCompatibleTextRendering = true;
+        b.UseCompatibleTextRendering = false;
         b.MouseEnter += (_, _) =>
         {
             b.BackColor = Color.FromArgb(232, 248, 242);
@@ -351,7 +414,7 @@ internal static class UiTheme
             Padding = new Padding(0, 0, 4, 0),
             Margin = new Padding(0, 14, 0, 14),
             AutoEllipsis = true,
-            UseCompatibleTextRendering = true
+            UseCompatibleTextRendering = false
         };
         lay.Controls.Add(titleLbl, 1, 0);
 
@@ -461,7 +524,7 @@ internal static class UiTheme
             BackColor = Color.Transparent,
             Padding = new Padding(8, 0, 0, 0),
             TextAlign = ContentAlignment.MiddleLeft,
-            UseCompatibleTextRendering = true
+            UseCompatibleTextRendering = false
         }, 0, 0);
         lay.Controls.Add(new Label
         {
@@ -472,7 +535,7 @@ internal static class UiTheme
             BackColor = Color.Transparent,
             Padding = new Padding(8, 0, 4, 0),
             TextAlign = ContentAlignment.TopLeft,
-            UseCompatibleTextRendering = true,
+            UseCompatibleTextRendering = false,
             AutoEllipsis = false
         }, 0, 1);
         panel.Controls.Add(lay);
@@ -513,7 +576,7 @@ internal static class UiTheme
             Padding = new Padding(8, 0, 0, 0),
             TextAlign = ContentAlignment.MiddleLeft,
             AutoEllipsis = true,
-            UseCompatibleTextRendering = true
+            UseCompatibleTextRendering = false
         });
         return panel;
     }
@@ -557,7 +620,7 @@ internal static class UiTheme
         b.Padding = padding ?? new Padding(18, 9, 18, 9);
         b.Margin = new Padding(0, 4, 0, 4);
         b.UseVisualStyleBackColor = false;
-        b.UseCompatibleTextRendering = true;
+        b.UseCompatibleTextRendering = false;
         b.MouseEnter += (_, _) =>
         {
             b.BackColor = hover;
@@ -767,7 +830,7 @@ internal static class UiTheme
         b.Padding = new Padding(8, 4, 8, 4);
         b.Margin = new Padding(0, 4, 0, 2);
         b.UseVisualStyleBackColor = false;
-        b.UseCompatibleTextRendering = true;
+        b.UseCompatibleTextRendering = false;
         b.MouseEnter += (_, _) =>
         {
             b.BackColor = PrimarySoft;
@@ -984,7 +1047,7 @@ internal static class UiTheme
             ForeColor = TextMuted,
             Font = UiFont(compact ? 9f : 9.75f, FontStyle.Bold),
             BackColor = Color.Transparent,
-            UseCompatibleTextRendering = true
+            UseCompatibleTextRendering = false
         };
 
         row.Controls.Add(bar, 0, 0);

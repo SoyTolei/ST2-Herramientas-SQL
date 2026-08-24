@@ -46,7 +46,7 @@ internal sealed class ScheduleBackupForm : Form
             StringComparer.OrdinalIgnoreCase);
 
         Text = "Programar backups automáticos";
-        AutoScaleMode = AutoScaleMode.Dpi;
+        UiTheme.ApplyDpiAwareScaling(this);
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = true;
         MinimizeBox = false;
@@ -228,7 +228,9 @@ internal sealed class ScheduleBackupForm : Form
         };
         folderPanel.Controls.Add(_lblFolder);
         root.Controls.Add(
-            CardSection.Create("Carpeta destino (se crea una subcarpeta por día)", folderPanel),
+            CardSection.Create(
+                "Carpeta destino (subcarpeta por día · se borra lo que tenga más de 7 días)",
+                folderPanel),
             0, 3);
 
         _statusPanel = new Panel

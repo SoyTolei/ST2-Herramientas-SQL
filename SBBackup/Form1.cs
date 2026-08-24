@@ -44,6 +44,7 @@ public partial class Form1 : Form
         _backup = new BackupCoordinator(_logService);
 
         InitializeComponent();
+        UiTheme.ApplyDpiAwareScaling(this);
         TryApplyWindowIcon();
         Text = "ST2 · Backup de bases";
         MinimumSize = new Size(880, 420);

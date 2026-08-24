@@ -11,7 +11,10 @@ internal static class OutputPathHelper
     private const string WorkspaceFolderName = "ST2 - SBBackup";
 
     /// <summary>Subcarpeta fija para backups del Programador de tareas.</summary>
-    internal const string ScheduledBackupFolderName = "Respaldo de Backups";
+    internal const string ScheduledBackupFolderName = "Backups Automaticos Bejerman ST2";
+
+    /// <summary>Se borran las copias automáticas más viejas que esta cantidad de días.</summary>
+    internal const int ScheduledBackupRetentionDays = 7;
 
 
 
@@ -118,7 +121,7 @@ internal static class OutputPathHelper
     }
 
     /// <summary>
-    /// Destino de backups programados: carpeta por defecto + «Respaldo de Backups».
+    /// Destino de backups programados: carpeta por defecto + «Backups Automaticos Bejerman ST2».
     /// </summary>
     public static string GetScheduledBackupDirectory()
     {
@@ -143,7 +146,7 @@ internal static class OutputPathHelper
     }
 
     /// <summary>
-    /// Subcarpeta del día dentro de «Respaldo de Backups», p. ej. «Lunes 10-08-2026».
+    /// Subcarpeta del día dentro de «Backups Automaticos Bejerman ST2», p. ej. «Lunes 10-08-2026».
     /// Ahí se guarda el ZIP del backup programado.
     /// </summary>
     public static string GetScheduledBackupDayDirectory(DateTime? day = null)
@@ -173,6 +176,84 @@ internal static class OutputPathHelper
         {
             return dir;
         }
+    }
+
+    /// <summary>
+    /// Borra subcarpetas de backup automático (y ZIP sueltos) con más de
+    /// <see cref="ScheduledBackupRetentionDays"/> días. No toca la carpeta «logs».
+    /// </summary>
+    public static int PruneExpiredScheduledBackups(string scheduledRoot, Action<string>? log)
+    {
+        if (string.IsNullOrWhiteSpace(scheduledRoot) || !Directory.Exists(scheduledRoot))
+            return 0;
+
+        var cutoff = DateTime.Now.Date.AddDays(-ScheduledBackupRetentionDays);
+        var removed = 0;
+
+        foreach (var dir in Directory.GetDirectories(scheduledRoot))
+        {
+            var name = Path.GetFileName(dir);
+            if (string.Equals(name, "logs", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (!IsScheduledCopyOlderThanCutoff(dir, name, cutoff))
+                continue;
+
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+                removed++;
+                log?.Invoke($"Se eliminó la copia automática más vieja: {name}");
+            }
+            catch (Exception ex)
+            {
+                log?.Invoke("No se pudo borrar «" + name + "»: " + UserMessageSpanish.ShortTechnical(ex));
+            }
+        }
+
+        foreach (var zip in Directory.GetFiles(scheduledRoot, "*.zip", SearchOption.TopDirectoryOnly))
+        {
+            try
+            {
+                var info = new FileInfo(zip);
+                if (info.LastWriteTime.Date >= cutoff)
+                    continue;
+
+                File.Delete(zip);
+                removed++;
+                log?.Invoke("Se eliminó el ZIP más viejo: " + info.Name);
+            }
+            catch (Exception ex)
+            {
+                log?.Invoke("No se pudo borrar «" + Path.GetFileName(zip) + "»: " + UserMessageSpanish.ShortTechnical(ex));
+            }
+        }
+
+        return removed;
+    }
+
+    private static bool IsScheduledCopyOlderThanCutoff(string dir, string folderName, DateTime cutoffDate)
+    {
+        var fromName = TryParseDayFolderDate(folderName);
+        var stamp = fromName ?? Directory.GetLastWriteTime(dir).Date;
+        return stamp < cutoffDate;
+    }
+
+    private static DateTime? TryParseDayFolderDate(string folderName)
+    {
+        // «Lunes 10-08-2026»
+        var s = folderName.Trim();
+        var space = s.LastIndexOf(' ');
+        var datePart = space >= 0 ? s[(space + 1)..] : s;
+        if (DateTime.TryParseExact(
+                datePart,
+                "dd-MM-yyyy",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out var d))
+            return d.Date;
+
+        return null;
     }
 
     /// <summary>Ruta absoluta de la carpeta de trabajo (.bak y ZIP).</summary>

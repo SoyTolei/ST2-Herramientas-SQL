@@ -73,11 +73,9 @@ internal static class ScheduledBackupStatus
                     : "Bases (" + dbs.Count + "): " + string.Join(", ", dbs.Take(4)) + "…");
             }
 
-            var dest = string.IsNullOrWhiteSpace(profile.OutputDirectory)
-                ? OutputPathHelper.GetScheduledBackupDirectory()
-                : profile.OutputDirectory.Trim();
+            var dest = OutputPathHelper.GetScheduledBackupDirectory();
             sb.AppendLine("Carpeta: " + dest);
-            sb.AppendLine("  (cada corrida crea subcarpeta del día, p. ej. «Lunes 10-08-2026»)");
+            sb.AppendLine("  (subcarpeta por día; se elimina lo más viejo a los 7 días)");
         }
 
         if (taskExists)
@@ -92,7 +90,7 @@ internal static class ScheduledBackupStatus
                 sb.AppendLine("Próxima ejecución: (consultar Programador de tareas)");
         }
 
-        var last = TryDescribeLastGeneratedBackup(profile?.OutputDirectory);
+        var last = TryDescribeLastGeneratedBackup(OutputPathHelper.GetScheduledBackupDirectory());
         if (!string.IsNullOrWhiteSpace(last))
         {
             sb.AppendLine();

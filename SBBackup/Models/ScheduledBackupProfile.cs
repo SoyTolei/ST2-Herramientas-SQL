@@ -13,7 +13,7 @@ public sealed class ScheduledBackupProfile
     /// <summary>Nombres físicos de las bases a respaldar.</summary>
     public List<string> DatabaseNames { get; set; } = [];
 
-    /// <summary>Carpeta destino (por defecto …\Respaldo de Backups).</summary>
+    /// <summary>Carpeta destino (por defecto …\Backups Automaticos Bejerman ST2).</summary>
     public string OutputDirectory { get; set; } = "";
 
     /// <summary><see cref="FrequencyDaily"/> o <see cref="FrequencyWeekly"/>.</summary>

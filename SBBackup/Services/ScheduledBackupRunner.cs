@@ -71,9 +71,7 @@ internal static class ScheduledBackupRunner
                 return 1;
             }
 
-            var baseDir = string.IsNullOrWhiteSpace(profile.OutputDirectory)
-                ? OutputPathHelper.GetScheduledBackupDirectory()
-                : profile.OutputDirectory.Trim();
+            var baseDir = OutputPathHelper.GetScheduledBackupDirectory();
 
             if (!OutputPathHelper.TryValidateWriteAccess(baseDir, out var pathError))
             {
@@ -82,7 +80,7 @@ internal static class ScheduledBackupRunner
             }
 
             baseDir = OutputPathHelper.ResolveWorkspaceDirectory(baseDir);
-            // ZIP del día: …\Respaldo de Backups\Lunes 10-08-2026\
+            // ZIP del día: …\Backups Automaticos Bejerman ST2\Lunes 10-08-2026\
             var outputDir = OutputPathHelper.GetScheduledBackupDayDirectory(DateTime.Now);
             if (!OutputPathHelper.TryValidateWriteAccess(outputDir, out pathError))
             {
@@ -128,6 +126,11 @@ internal static class ScheduledBackupRunner
 
             Log($"OK · {result.DatabasesBackedUp} base(s) · " +
                 (result.ZipFilePath ?? result.OutputDirectory));
+
+            var pruned = OutputPathHelper.PruneExpiredScheduledBackups(baseDir, Log);
+            if (pruned == 0)
+                Log($"Retención: se conservan las copias de los últimos {OutputPathHelper.ScheduledBackupRetentionDays} días.");
+
             return 0;
         }
         catch (ZipCreationException ex)

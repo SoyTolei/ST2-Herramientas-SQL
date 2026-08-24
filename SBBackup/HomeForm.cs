@@ -24,16 +24,16 @@ public sealed class HomeForm : Form
     public HomeForm()
     {
         Text = "ST2 · Herramientas SQL";
-        AutoScaleMode = AutoScaleMode.Dpi;
+        UiTheme.ApplyDpiAwareScaling(this);
         Font = UiTheme.UiFont();
         BackColor = UiTheme.AppBack;
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedSingle;
         MaximizeBox = false;
         MinimizeBox = true;
-        ClientSize = new Size(480, 520);
-        MinimumSize = ClientSize;
-        MaximumSize = new Size(520, 560);
+        ClientSize = new Size(520, 580);
+        MinimumSize = new Size(480, 540);
+        DoubleBuffered = true;
         TryApplyIcon();
         BuildUi();
         AppSession.ConnectionChanged += OnSessionConnectionChanged;
@@ -103,7 +103,7 @@ public sealed class HomeForm : Form
         }, 0, 0);
         titleLay.Controls.Add(new Label
         {
-            Text = "Backup, scripts, consultas y traza SQL para Sistemas Bejerman",
+            Text = "Backup, scripts, consultas y traza SQL",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.TopLeft,
             ForeColor = Color.FromArgb(255, 220, 200),
@@ -121,11 +121,11 @@ public sealed class HomeForm : Form
             BackColor = UiTheme.AppBack,
             Padding = new Padding(22, 16, 22, 10)
         };
-        stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 96f));
-        stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 28f));
-        stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 46f));
-        stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 46f));
-        stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 150f));
+        stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 100f));
+        stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 30f));
+        stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 48f));
+        stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 48f));
+        stack.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
         stack.Controls.Add(BuildConnectSection(), 0, 0);
         stack.Controls.Add(new Label
@@ -139,12 +139,12 @@ public sealed class HomeForm : Form
             Margin = new Padding(0, 0, 0, 2)
         }, 0, 1);
 
-        _btnBackup = new Button { Text = "Backup de Bases", Dock = DockStyle.Fill };
+        _btnBackup = new RoundedActionButton { Text = "Backup de Bases", Dock = DockStyle.Fill, AutoSize = false };
         UiTheme.StyleMenuButton(_btnBackup, primary: true);
-        _btnBackup.Margin = new Padding(0, 0, 0, 6);
+        _btnBackup.Margin = new Padding(0, 0, 0, 8);
         _btnBackup.Click += (_, _) => OpenBackup();
 
-        _btnRestore = new Button { Text = "Restaurar Bases", Dock = DockStyle.Fill };
+        _btnRestore = new RoundedActionButton { Text = "Restaurar Bases", Dock = DockStyle.Fill, AutoSize = false };
         UiTheme.StyleMenuButton(_btnRestore, primary: false);
         _btnRestore.Margin = new Padding(0);
         _btnRestore.Click += (_, _) => OpenRestore();
@@ -157,7 +157,7 @@ public sealed class HomeForm : Form
             Dock = DockStyle.Fill,
             ColumnCount = 1,
             RowCount = 2,
-            BackColor = UiTheme.Surface,
+            BackColor = Color.Transparent,
             Padding = new Padding(4, 4, 4, 4)
         };
         toolsHost.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
@@ -167,7 +167,7 @@ public sealed class HomeForm : Form
         {
             Dock = DockStyle.Fill,
             Title = "Aplicar Script/Query",
-            Subtitle = "Consultas, scripts frecuentes y análisis",
+            Subtitle = "Consultas y scripts frecuentes",
             Margin = new Padding(0, 0, 0, 4)
         };
         _btnQuery.RowClick += (_, _) => OpenQuery();
@@ -176,7 +176,7 @@ public sealed class HomeForm : Form
         {
             Dock = DockStyle.Fill,
             Title = "Traza SQL",
-            Subtitle = "Errores y movimientos en vivo, con filtro por equipo e IA",
+            Subtitle = "Errores y movimientos en vivo",
             Margin = new Padding(0)
         };
         _btnTrace.RowClick += (_, _) => OpenTrace();

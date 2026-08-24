@@ -28,7 +28,7 @@ public sealed class RestoreForm : Form
     public RestoreForm()
     {
         Text = "ST2 · Restaurar base";
-        AutoScaleMode = AutoScaleMode.Dpi;
+        UiTheme.ApplyDpiAwareScaling(this);
         Font = UiTheme.UiFont();
         BackColor = UiTheme.AppBack;
         StartPosition = FormStartPosition.CenterScreen;
@@ -275,18 +275,28 @@ public sealed class RestoreForm : Form
         {
             Name = "colFecha",
             HeaderText = "Fecha del backup",
-            FillWeight = 22,
-            MinimumWidth = 110,
+            FillWeight = 18,
+            MinimumWidth = 100,
             SortMode = DataGridViewColumnSortMode.Automatic
         };
         grid.Columns.Add(colFecha);
+
+        var colCollation = new DataGridViewTextBoxColumn
+        {
+            Name = "colCollation",
+            HeaderText = "Collation",
+            FillWeight = 20,
+            MinimumWidth = 100,
+            SortMode = DataGridViewColumnSortMode.Automatic
+        };
+        grid.Columns.Add(colCollation);
 
         var colAccion = new DataGridViewTextBoxColumn
         {
             Name = "colAccion",
             HeaderText = "Acción",
-            FillWeight = 18,
-            MinimumWidth = 90,
+            FillWeight = 14,
+            MinimumWidth = 80,
             SortMode = DataGridViewColumnSortMode.Automatic
         };
         colAccion.DefaultCellStyle.ForeColor = UiTheme.Danger;
@@ -321,6 +331,10 @@ public sealed class RestoreForm : Form
             "colNombre" => string.Compare(a.DatabaseName, b.DatabaseName, StringComparison.CurrentCultureIgnoreCase),
             "colTamano" => CompareNullableLong(GetFileLength(a.LocalPath), GetFileLength(b.LocalPath)),
             "colFecha" => Nullable.Compare(a.BackupDate, b.BackupDate),
+            "colCollation" => string.Compare(
+                FormatCollationCell(a),
+                FormatCollationCell(b),
+                StringComparison.CurrentCultureIgnoreCase),
             "colAccion" => string.Compare(
                 a.DatabaseExists == true ? "sobrescribe" : "",
                 b.DatabaseExists == true ? "sobrescribe" : "",
@@ -366,6 +380,42 @@ public sealed class RestoreForm : Form
 
         if (grid.Columns[e.ColumnIndex].Name == "colNombre")
             e.CellStyle.Font = UiTheme.UiFont(8.25f, FontStyle.Bold);
+
+        if (grid.Columns[e.ColumnIndex].Name == "colCollation"
+            && grid.Rows[e.RowIndex].Tag is RestoreCoordinator.RestoreFilePreview preview)
+        {
+            e.CellStyle.ForeColor = preview.CollationMatches switch
+            {
+                true => UiTheme.IncludeYesFg,
+                false => UiTheme.IncludeNoFg,
+                _ => UiTheme.TextMuted
+            };
+            if (preview.CollationMatches == false)
+                e.CellStyle.Font = UiTheme.UiFont(8.25f, FontStyle.Bold);
+        }
+    }
+
+    private static string FormatCollationCell(RestoreCoordinator.RestoreFilePreview p)
+    {
+        if (p.CollationMatches == true)
+            return "Coincide";
+        if (p.CollationMatches == false)
+            return "Distinta";
+        if (!string.IsNullOrWhiteSpace(p.BackupCollation))
+            return p.BackupCollation!;
+        return "?";
+    }
+
+    private static string FormatCollationTooltip(RestoreCoordinator.RestoreFilePreview p)
+    {
+        var bak = string.IsNullOrWhiteSpace(p.BackupCollation) ? "?" : p.BackupCollation;
+        var inst = string.IsNullOrWhiteSpace(p.InstanceCollation) ? "?" : p.InstanceCollation;
+        return p.CollationMatches switch
+        {
+            true => $"Collation del backup e instancia: {bak}",
+            false => $"Backup: {bak}\nInstancia: {inst}",
+            _ => $"Backup: {bak}\nInstancia: {inst}\n(no se pudo comparar)"
+        };
     }
 
     private void PinManagerRowFirst()
@@ -435,8 +485,10 @@ public sealed class RestoreForm : Form
                 p.DatabaseName ?? "",
                 TryFormatSize(p.LocalPath) ?? "",
                 p.BackupDate?.ToString("dd/MM/yyyy HH:mm") ?? "",
+                FormatCollationCell(p),
                 p.DatabaseExists == true ? "sobrescribe" : "");
             _gridFiles.Rows[i].Tag = p;
+            _gridFiles.Rows[i].Cells["colCollation"].ToolTipText = FormatCollationTooltip(p);
         }
 
         RenumberGridRows();
@@ -512,11 +564,25 @@ public sealed class RestoreForm : Form
         PinManagerRowFirst();
         RenumberGridRows();
 
-        _lblCount.Text = _files.Count == 1
+        var mismatches = _filePreviews.Count(p => p.CollationMatches == false);
+        var instanceCollation = _filePreviews
+            .Select(p => p.InstanceCollation)
+            .FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
+
+        var countText = _files.Count == 1
             ? "1 archivo seleccionado."
             : $"{_files.Count} archivos seleccionados.";
+        if (!string.IsNullOrWhiteSpace(instanceCollation))
+            countText += $"  ·  Collation de la instancia: {instanceCollation}";
+        if (mismatches > 0)
+            countText += $"  ·  ⚠ {mismatches} con collation distinta";
+
+        _lblCount.Text = countText;
+        _lblCount.ForeColor = mismatches > 0 ? UiTheme.IncludeNoFg : UiTheme.TextMuted;
         _btnRestore.Enabled = !_running && _files.Count > 0;
-        SetRestoreStatus("");
+        SetRestoreStatus(mismatches > 0
+            ? "Hay backups con collation distinta a la instancia. Revisá la columna Collation."
+            : "");
     }
 
     private async Task RunRestoreAsync()
@@ -546,16 +612,35 @@ public sealed class RestoreForm : Form
             }
 
             var resumen = string.Join("\n", plan.Select(p =>
-                $"   • {p.DatabaseName}  ←  {Path.GetFileName(p.LocalBakPath)}" +
-                (p.DatabaseExists ? "   [SE SOBRESCRIBE]" : "   [se crea nueva]")));
+            {
+                var line = $"   • {p.DatabaseName}  ←  {Path.GetFileName(p.LocalBakPath)}" +
+                           (p.DatabaseExists ? "   [SE SOBRESCRIBE]" : "   [se crea nueva]");
+                if (p.CollationMatches == false)
+                {
+                    line += $"\n      Collation: backup «{p.BackupCollation}» ≠ instancia «{p.InstanceCollation}»";
+                }
+                else if (p.CollationMatches == true && !string.IsNullOrWhiteSpace(p.BackupCollation))
+                {
+                    line += $"\n      Collation: coincide ({p.BackupCollation})";
+                }
+
+                return line;
+            }));
+
+            var mismatches = plan.Count(p => p.CollationMatches == false);
+            var avisoCollation = mismatches > 0
+                ? $"\n\n⚠ {mismatches} backup(s) tienen collation DISTINTA a la de esta instancia.\n" +
+                  "SQL permite restaurar igual, pero pueden fallar comparaciones, tempdb o reportes.\n"
+                : "";
 
             if (MessageBox.Show(
                     this,
                     "Se van a restaurar las siguientes bases (WITH REPLACE):\n\n" + resumen +
-                    "\n\n¿Confirmás la restauración?",
-                    "Confirmar restauración",
+                    avisoCollation +
+                    "\n¿Confirmás la restauración?",
+                    mismatches > 0 ? "Collation distinta — confirmar restauración" : "Confirmar restauración",
                     MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Warning,
+                    mismatches > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Warning,
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             {
                 AppendLog("Restauración cancelada por el usuario.");
