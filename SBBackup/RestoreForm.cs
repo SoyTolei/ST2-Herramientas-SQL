@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
+using System.Text;
 using SBBackup.Services;
 using SBBackup.Ui;
 
@@ -29,6 +30,7 @@ public sealed class RestoreForm : Form
     {
         Text = "ST2 · Restaurar base";
         UiTheme.ApplyDpiAwareScaling(this);
+        AppIcon.Apply(this);
         Font = UiTheme.UiFont();
         BackColor = UiTheme.AppBack;
         StartPosition = FormStartPosition.CenterScreen;
@@ -71,9 +73,9 @@ public sealed class RestoreForm : Form
         root.Controls.Add(_lblConnStatus, 0, 0);
 
         var warn = UiTheme.CreateCompactAlertBanner(
-            "Atención",
-            "Si la base ya existe, la sobreescribira sobre la misma instancia;" + Environment.NewLine +
-            "Durante éste proceso se desconectará a todos los usuarios activos.",
+            "Importante",
+            "Si la base ya está en este servidor, se reemplaza por el contenido del backup." + Environment.NewLine +
+            "Mientras restaura, se desconecta a todos los usuarios de esa base.",
             UiTheme.Danger,
             UiTheme.IncludeNoBg,
             UiTheme.IncludeNoFg);
@@ -91,30 +93,40 @@ public sealed class RestoreForm : Form
             BackColor = Color.Transparent,
             Margin = new Padding(0, 4, 0, 0)
         };
-        filesInner.RowStyles.Add(new RowStyle(SizeType.Absolute, 40f));
-        filesInner.RowStyles.Add(new RowStyle(SizeType.Absolute, 20f));
+        filesInner.RowStyles.Add(new RowStyle(SizeType.Absolute, 48f));
+        filesInner.RowStyles.Add(new RowStyle(SizeType.Absolute, 22f));
         filesInner.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
         var pickHost = new Panel
         {
             Dock = DockStyle.Fill,
             BackColor = Color.Transparent,
-            Padding = new Padding(4, 6, 4, 0)
+            Padding = new Padding(6, 6, 6, 2),
+            AutoSize = false
         };
-        _btnPick = new Button
+        _btnPick = new RoundedActionButton
         {
-            Text = "Elegir archivos .bak",
+            Text = "Elegir Base/s a restaurar",
             Enabled = false,
+            AutoSize = false,
             Anchor = AnchorStyles.Left | AnchorStyles.Top
         };
         UiTheme.StylePickFileButton(_btnPick);
+        var needW = TextRenderer.MeasureText(
+            _btnPick.Text,
+            _btnPick.Font,
+            Size.Empty,
+            TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding).Width + 48;
+        _btnPick.Size = new Size(Math.Max(needW, 260), 38);
+        _btnPick.MinimumSize = _btnPick.Size;
+        _btnPick.MaximumSize = _btnPick.Size;
         _btnPick.Click += async (_, _) => await PickFilesAsync().ConfigureAwait(true);
         pickHost.Controls.Add(_btnPick);
         filesInner.Controls.Add(pickHost, 0, 0);
 
         _lblCount = new Label
         {
-            Text = "Elegí los archivos .bak a restaurar.",
+            Text = "Elegí la o las bases (.bak) a restaurar.",
             Dock = DockStyle.Fill,
             AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -284,9 +296,9 @@ public sealed class RestoreForm : Form
         var colCollation = new DataGridViewTextBoxColumn
         {
             Name = "colCollation",
-            HeaderText = "Collation",
-            FillWeight = 20,
-            MinimumWidth = 100,
+            HeaderText = "Con el servidor",
+            FillWeight = 22,
+            MinimumWidth = 110,
             SortMode = DataGridViewColumnSortMode.Automatic
         };
         grid.Columns.Add(colCollation);
@@ -294,9 +306,9 @@ public sealed class RestoreForm : Form
         var colAccion = new DataGridViewTextBoxColumn
         {
             Name = "colAccion",
-            HeaderText = "Acción",
-            FillWeight = 14,
-            MinimumWidth = 80,
+            HeaderText = "Qué hace",
+            FillWeight = 16,
+            MinimumWidth = 90,
             SortMode = DataGridViewColumnSortMode.Automatic
         };
         colAccion.DefaultCellStyle.ForeColor = UiTheme.Danger;
@@ -336,8 +348,8 @@ public sealed class RestoreForm : Form
                 FormatCollationCell(b),
                 StringComparison.CurrentCultureIgnoreCase),
             "colAccion" => string.Compare(
-                a.DatabaseExists == true ? "sobrescribe" : "",
-                b.DatabaseExists == true ? "sobrescribe" : "",
+                a.DatabaseExists == true ? "Reemplaza" : "Nueva",
+                b.DatabaseExists == true ? "Reemplaza" : "Nueva",
                 StringComparison.CurrentCultureIgnoreCase),
             _ => 0
         };
@@ -398,25 +410,32 @@ public sealed class RestoreForm : Form
     private static string FormatCollationCell(RestoreCoordinator.RestoreFilePreview p)
     {
         if (p.CollationMatches == true)
-            return "Coincide";
+            return "OK";
         if (p.CollationMatches == false)
-            return "Distinta";
+            return "Diferente → se ajusta";
         if (!string.IsNullOrWhiteSpace(p.BackupCollation))
-            return p.BackupCollation!;
-        return "?";
+            return "Sin comparar";
+        return "—";
     }
 
     private static string FormatCollationTooltip(RestoreCoordinator.RestoreFilePreview p)
     {
-        var bak = string.IsNullOrWhiteSpace(p.BackupCollation) ? "?" : p.BackupCollation;
-        var inst = string.IsNullOrWhiteSpace(p.InstanceCollation) ? "?" : p.InstanceCollation;
+        var bak = string.IsNullOrWhiteSpace(p.BackupCollation) ? "desconocido" : p.BackupCollation;
+        var inst = string.IsNullOrWhiteSpace(p.InstanceCollation) ? "desconocido" : p.InstanceCollation;
         return p.CollationMatches switch
         {
-            true => $"Collation del backup e instancia: {bak}",
-            false => $"Backup: {bak}\nInstancia: {inst}",
-            _ => $"Backup: {bak}\nInstancia: {inst}\n(no se pudo comparar)"
+            true => $"El backup y este servidor usan el mismo idioma/orden de texto:\n{bak}",
+            false =>
+                $"El backup vino con: {bak}\n" +
+                $"Este servidor usa: {inst}\n\n" +
+                "Al restaurar, ST2 ajusta el idioma/orden de la base al del servidor\n" +
+                "(solo para datos nuevos; lo que ya viene en el backup no se reescribe).",
+            _ => $"Backup: {bak}\nServidor: {inst}\nNo se pudo comparar todavía."
         };
     }
+
+    private static string FormatActionCell(RestoreCoordinator.RestoreFilePreview p) =>
+        p.DatabaseExists == true ? "Reemplaza" : "Nueva";
 
     private void PinManagerRowFirst()
     {
@@ -486,9 +505,12 @@ public sealed class RestoreForm : Form
                 TryFormatSize(p.LocalPath) ?? "",
                 p.BackupDate?.ToString("dd/MM/yyyy HH:mm") ?? "",
                 FormatCollationCell(p),
-                p.DatabaseExists == true ? "sobrescribe" : "");
+                FormatActionCell(p));
             _gridFiles.Rows[i].Tag = p;
             _gridFiles.Rows[i].Cells["colCollation"].ToolTipText = FormatCollationTooltip(p);
+            _gridFiles.Rows[i].Cells["colAccion"].ToolTipText = p.DatabaseExists == true
+                ? "La base ya existe: se reemplaza por completo con este backup."
+                : "La base no existe: se crea nueva.";
         }
 
         RenumberGridRows();
@@ -570,18 +592,20 @@ public sealed class RestoreForm : Form
             .FirstOrDefault(c => !string.IsNullOrWhiteSpace(c));
 
         var countText = _files.Count == 1
-            ? "1 archivo seleccionado."
-            : $"{_files.Count} archivos seleccionados.";
+            ? "1 archivo listo para restaurar."
+            : $"{_files.Count} archivos listos para restaurar.";
         if (!string.IsNullOrWhiteSpace(instanceCollation))
-            countText += $"  ·  Collation de la instancia: {instanceCollation}";
+            countText += $"  ·  Este servidor: {instanceCollation}";
         if (mismatches > 0)
-            countText += $"  ·  ⚠ {mismatches} con collation distinta";
+            countText += mismatches == 1
+                ? "  ·  1 diferente → ST2 lo ajusta al restaurar"
+                : $"  ·  {mismatches} diferentes → ST2 los ajusta al restaurar";
 
         _lblCount.Text = countText;
         _lblCount.ForeColor = mismatches > 0 ? UiTheme.IncludeNoFg : UiTheme.TextMuted;
         _btnRestore.Enabled = !_running && _files.Count > 0;
         SetRestoreStatus(mismatches > 0
-            ? "Hay backups con collation distinta a la instancia. Revisá la columna Collation."
+            ? "Hay backups con idioma/orden distinto al servidor. Al restaurar, ST2 los ajusta (solo para datos nuevos)."
             : "");
     }
 
@@ -611,36 +635,15 @@ public sealed class RestoreForm : Form
                     .ConfigureAwait(true));
             }
 
-            var resumen = string.Join("\n", plan.Select(p =>
-            {
-                var line = $"   • {p.DatabaseName}  ←  {Path.GetFileName(p.LocalBakPath)}" +
-                           (p.DatabaseExists ? "   [SE SOBRESCRIBE]" : "   [se crea nueva]");
-                if (p.CollationMatches == false)
-                {
-                    line += $"\n      Collation: backup «{p.BackupCollation}» ≠ instancia «{p.InstanceCollation}»";
-                }
-                else if (p.CollationMatches == true && !string.IsNullOrWhiteSpace(p.BackupCollation))
-                {
-                    line += $"\n      Collation: coincide ({p.BackupCollation})";
-                }
-
-                return line;
-            }));
-
             var mismatches = plan.Count(p => p.CollationMatches == false);
-            var avisoCollation = mismatches > 0
-                ? $"\n\n⚠ {mismatches} backup(s) tienen collation DISTINTA a la de esta instancia.\n" +
-                  "SQL permite restaurar igual, pero pueden fallar comparaciones, tempdb o reportes.\n"
-                : "";
+            var confirmText = BuildRestoreConfirmMessage(plan);
 
             if (MessageBox.Show(
                     this,
-                    "Se van a restaurar las siguientes bases (WITH REPLACE):\n\n" + resumen +
-                    avisoCollation +
-                    "\n¿Confirmás la restauración?",
-                    mismatches > 0 ? "Collation distinta — confirmar restauración" : "Confirmar restauración",
+                    confirmText,
+                    mismatches > 0 ? "Confirmar — se ajustará el idioma" : "Confirmar restauración",
                     MessageBoxButtons.YesNo,
-                    mismatches > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Warning,
+                    MessageBoxIcon.Warning,
                     MessageBoxDefaultButton.Button2) != DialogResult.Yes)
             {
                 AppendLog("Restauración cancelada por el usuario.");
@@ -671,19 +674,21 @@ public sealed class RestoreForm : Form
                     .ConfigureAwait(true);
 
                 ApplyRestoreProgress(Math.Clamp(basePct + slice - 1, 0, 99),
-                    $"{statusPrefix} — bas_server y claves ADMIN/CNV", sw);
+                    $"{statusPrefix} — ajustes post-restore…", sw);
             }
+
+            var alignedOk = plan.Count(p => p.CollationAligned == true);
+            var alignedFail = plan.Count(p => p.CollationAligned == false);
+            var postNotes = BuildPostRestoreNotes(alignedOk, alignedFail);
 
             _progress.Value = 100;
             _lblPercent.Text = "100 %";
-            SetRestoreStatus($"Listo — se restauraron {plan.Count} base(s), bas_server y claves ADMIN/CNV. · ⏱ " +
+            SetRestoreStatus($"Listo — {plan.Count} base(s) restaurada(s). · ⏱ " +
                              UiTheme.FormatDuration(sw.Elapsed));
             MessageBox.Show(this,
                 plan.Count == 1
-                    ? $"La base «{plan[0].DatabaseName}» se restauró correctamente.\r\n\r\n" +
-                      "Se actualizó bas_server y se blanquearon las claves de ADMIN y CNV."
-                    : $"Se restauraron {plan.Count} bases correctamente.\r\n\r\n" +
-                      "En cada una se actualizó bas_server y se blanquearon las claves de ADMIN y CNV.",
+                    ? $"La base «{plan[0].DatabaseName}» se restauró correctamente.\r\n\r\n{postNotes}"
+                    : $"Se restauraron {plan.Count} bases correctamente.\r\n\r\n{postNotes}",
                 Text, MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
@@ -703,10 +708,79 @@ public sealed class RestoreForm : Form
         }
     }
 
+    private static string BuildRestoreConfirmMessage(
+        IReadOnlyList<RestoreCoordinator.RestorePlanItem> plan)
+    {
+        var sb = new StringBuilder();
+        var mismatches = plan.Count(p => p.CollationMatches == false);
+
+        if (plan.Count == 1)
+        {
+            var p = plan[0];
+            if (p.DatabaseExists)
+                sb.AppendLine($"Vas a reemplazar la base «{p.DatabaseName}».");
+            else
+                sb.AppendLine($"Vas a crear la base «{p.DatabaseName}».");
+
+            sb.AppendLine();
+            sb.AppendLine("Mientras restaura se desconecta a los usuarios de esa base.");
+        }
+        else
+        {
+            sb.AppendLine($"Vas a restaurar {plan.Count} bases:");
+            sb.AppendLine();
+            foreach (var p in plan)
+            {
+                var accion = p.DatabaseExists ? "reemplaza la actual" : "se crea nueva";
+                sb.AppendLine($"  • {p.DatabaseName}  ({accion})");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("Mientras restaura se desconecta a los usuarios de esas bases.");
+        }
+
+        if (mismatches > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine(mismatches == 1
+                ? "El backup no coincide con el idioma del servidor."
+                : $"{mismatches} backups no coinciden con el idioma del servidor.");
+            sb.AppendLine("ST2 lo ajustará solo (afecta datos nuevos).");
+        }
+
+        sb.AppendLine();
+        sb.Append("¿Continuar?");
+        return sb.ToString();
+    }
+
     private void CleanupStaging(IEnumerable<RestoreCoordinator.RestorePlanItem> plan)
     {
         foreach (var item in plan)
             RestoreCoordinator.TryDelete(item.ClientCleanupPath);
+    }
+
+    private static string BuildPostRestoreNotes(int alignedOk, int alignedFail)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("También se hizo:");
+        sb.AppendLine("• Actualizar el servidor de la base (bas_server)");
+        sb.AppendLine("• Dejar sin clave a los usuarios ADMIN y CNV");
+        if (alignedOk > 0)
+        {
+            sb.AppendLine(alignedOk == 1
+                ? "• Ajustar el idioma/orden de 1 base al de este servidor (solo datos nuevos)"
+                : $"• Ajustar el idioma/orden de {alignedOk} bases al de este servidor (solo datos nuevos)");
+        }
+
+        if (alignedFail > 0)
+        {
+            sb.AppendLine();
+            sb.Append(alignedFail == 1
+                ? "Aviso: no se pudo ajustar el idioma/orden de 1 base. La restauración igual quedó hecha."
+                : $"Aviso: no se pudo ajustar el idioma/orden de {alignedFail} bases. La restauración igual quedó hecha.");
+        }
+
+        return sb.ToString().TrimEnd();
     }
 
     private void SetRunning(bool running)

@@ -11,6 +11,7 @@ public sealed class HomeForm : Form
     private Button _btnConnect = null!;
     private Label _lblConnStatus = null!;
     private OrangeProgressBar _connectProgress = null!;
+    private TableLayoutPanel _connectLayout = null!;
     private Button _btnBackup = null!;
     private Button _btnRestore = null!;
     private NavRowControl _btnQuery = null!;
@@ -54,19 +55,7 @@ public sealed class HomeForm : Form
         UiTheme.BindFixedFormScreenFit(this);
     }
 
-    private void TryApplyIcon()
-    {
-        try
-        {
-            var icoPath = Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
-            if (File.Exists(icoPath))
-                Icon = new Icon(icoPath);
-        }
-        catch
-        {
-            // sin icono
-        }
-    }
+    private void TryApplyIcon() => AppIcon.Apply(this);
 
     private void BuildUi()
     {
@@ -121,7 +110,7 @@ public sealed class HomeForm : Form
             BackColor = UiTheme.AppBack,
             Padding = new Padding(22, 16, 22, 10)
         };
-        stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 100f));
+        stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 118f));
         stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 30f));
         stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 48f));
         stack.RowStyles.Add(new RowStyle(SizeType.Absolute, 48f));
@@ -241,65 +230,94 @@ public sealed class HomeForm : Form
 
     private Control BuildConnectSection()
     {
-        var outer = new TableLayoutPanel
+        _connectLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 4,
             BackColor = Color.Transparent
         };
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 34f));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 6f));
-        outer.RowStyles.Add(new RowStyle(SizeType.Absolute, 20f));
+        _connectLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 28f)); // servidor
+        _connectLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34f)); // conectar
+        _connectLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 0f));  // progreso (solo al conectar)
+        _connectLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 24f)); // estado
 
-        var bar = new TableLayoutPanel
+        var serverRow = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            ColumnCount = 3,
+            ColumnCount = 2,
             RowCount = 1,
-            BackColor = Color.Transparent
+            BackColor = Color.Transparent,
+            Margin = new Padding(0)
         };
-        bar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88f));
-        bar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-        bar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 96f));
+        serverRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 88f));
+        serverRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
 
-        bar.Controls.Add(new Label
+        serverRow.Controls.Add(new Label
         {
             Text = "SQL Server:",
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft,
             ForeColor = UiTheme.TextMuted,
-            Font = UiTheme.UiFont(9.75f)
+            Font = UiTheme.UiFont(9.75f),
+            Margin = new Padding(0)
         }, 0, 0);
 
         _txtServer = new TextBox
         {
             Dock = DockStyle.Fill,
             PlaceholderText = "SERVIDOR\\INSTANCIA",
-            Margin = new Padding(0, 2, 6, 2)
+            Margin = new Padding(0)
         };
         UiTheme.StyleTextBox(_txtServer, compact: true);
-        bar.Controls.Add(_txtServer, 1, 0);
+        serverRow.Controls.Add(_txtServer, 1, 0);
+        _connectLayout.Controls.Add(serverRow, 0, 0);
 
-        _btnConnect = new Button { Text = "Conectar", Dock = DockStyle.Fill, Margin = new Padding(0, 2, 0, 2) };
+        var btnHost = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = Color.Transparent,
+            Margin = new Padding(0),
+            Padding = new Padding(0)
+        };
+        _btnConnect = new Button
+        {
+            Text = "Conectar",
+            Size = new Size(140, 30),
+            Anchor = AnchorStyles.None
+        };
         UiTheme.StyleConnectButtonForBar(_btnConnect);
+        _btnConnect.Size = new Size(140, 30);
+        _btnConnect.MinimumSize = new Size(140, 30);
+        _btnConnect.MaximumSize = new Size(180, 30);
         _btnConnect.Click += async (_, _) => await OnConnectButtonClickAsync().ConfigureAwait(true);
-        bar.Controls.Add(_btnConnect, 2, 0);
-        outer.Controls.Add(bar, 0, 0);
+        btnHost.Controls.Add(_btnConnect);
+        btnHost.Resize += (_, _) =>
+        {
+            _btnConnect.Left = Math.Max(0, (btnHost.ClientSize.Width - _btnConnect.Width) / 2);
+            _btnConnect.Top = Math.Max(0, (btnHost.ClientSize.Height - _btnConnect.Height) / 2);
+        };
+        _connectLayout.Controls.Add(btnHost, 0, 1);
 
         _connectProgress = new OrangeProgressBar
         {
             Dock = DockStyle.Fill,
             Margin = new Padding(0),
-            MaxBarHeight = 5,
+            MaxBarHeight = 4,
             Visible = false
         };
-        outer.Controls.Add(_connectProgress, 0, 1);
+        _connectLayout.Controls.Add(_connectProgress, 0, 2);
 
         _lblConnStatus = UiTheme.CreateConnectionStatusLabel(centered: true);
-        outer.Controls.Add(_lblConnStatus, 0, 2);
+        _connectLayout.Controls.Add(_lblConnStatus, 0, 3);
 
-        return CardSection.CreateInlineBarFill(outer);
+        return CardSection.CreateInlineBarFill(_connectLayout);
+    }
+
+    private void SetConnectProgressRowVisible(bool visible)
+    {
+        _connectLayout.RowStyles[2].Height = visible ? 6f : 0f;
+        _connectProgress.Visible = visible;
     }
 
     private async Task OnConnectButtonClickAsync()
@@ -324,7 +342,7 @@ public sealed class HomeForm : Form
         _connectLastStep = "Conectando…";
 
         _btnConnect.Text = "Cancelar";
-        _connectProgress.Visible = true;
+        SetConnectProgressRowVisible(true);
         _connectProgress.Marquee = true;
         _lblConnStatus.ForeColor = UiTheme.TextMuted;
         _lblConnStatus.Text = _connectLastStep;
@@ -377,7 +395,7 @@ public sealed class HomeForm : Form
             _connecting = false;
             _btnConnect.Text = "Conectar";
             _connectProgress.Marquee = false;
-            _connectProgress.Visible = false;
+            SetConnectProgressRowVisible(false);
         }
     }
 

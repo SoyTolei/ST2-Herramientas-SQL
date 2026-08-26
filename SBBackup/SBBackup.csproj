@@ -13,9 +13,18 @@
     <AssemblyName>ST2 - Herramientas SQL</AssemblyName>
     <Product>ST2 - Herramientas SQL</Product>
     <AssemblyTitle>ST2 - Herramientas SQL</AssemblyTitle>
-    <!-- Icono del .exe: colocar SBBackup\Assets\app.ico (ver instrucciones al usuario) -->
+    <!-- Icono del .exe: SBBackup\Assets\app.ico (varios tamaños para taskbar nítida) -->
     <ApplicationIcon Condition="Exists('$(MSBuildProjectDirectory)\Assets\app.ico')">Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="Assets\app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+    <!-- Embebido: en publish single-file no siempre queda Assets\ junto al .exe -->
+    <EmbeddedResource Include="Assets\app.ico" LogicalName="ST2.app.ico" Condition="Exists('$(MSBuildProjectDirectory)\Assets\app.ico')" />
+  </ItemGroup>
 
   <!-- Publicación: un solo .exe, sin .NET instalado en la PC del usuario -->
   <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">

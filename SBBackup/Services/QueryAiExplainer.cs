@@ -268,15 +268,15 @@ public sealed class QueryAiExplainer : IDisposable
     }
 
     /// <summary>
-    /// Configuración de IA. Trae valores por defecto embebidos (para que funcione en cualquier PC
-    /// sin archivos extra) y, si existe un appsettings.local.json (junto al .exe o en %LocalAppData%\ST2),
-    /// esos valores tienen prioridad para poder cambiar la key sin recompilar.
+    /// Configuración de IA. Endpoint y modelo tienen valores por defecto;
+    /// la API key se lee de appsettings.local.json (junto al .exe o en %LocalAppData%\ST2).
     /// </summary>
     private sealed class AiSettings
     {
         public string Endpoint { get; set; } = "https://api.groq.com/openai/v1/chat/completions";
         public string ApiKey { get; set; } = "";
-        public string Model { get; set; } = "llama-3.3-70b-versatile";
+        // Groq retiró llama-3.3-70b-versatile (ago-2026). Reemplazo recomendado:
+        public string Model { get; set; } = "openai/gpt-oss-120b";
         public int TimeoutSeconds { get; set; } = 60;
 
         /// <summary>
@@ -295,7 +295,28 @@ public sealed class QueryAiExplainer : IDisposable
             foreach (var path in CandidatePaths())
                 Apply(settings, path);
 
+            // Modelos Groq retirados: si un appsettings viejo todavía los pide, migrar al reemplazo.
+            settings.Model = MigrateRetiredModel(settings.Model);
             return settings;
+        }
+
+        private static string MigrateRetiredModel(string model)
+        {
+            if (string.IsNullOrWhiteSpace(model))
+                return "openai/gpt-oss-120b";
+
+            var m = model.Trim();
+            if (m.Equals("llama-3.3-70b-versatile", StringComparison.OrdinalIgnoreCase)
+                || m.Equals("llama3-70b-8192", StringComparison.OrdinalIgnoreCase)
+                || m.Equals("llama-3.1-70b-versatile", StringComparison.OrdinalIgnoreCase)
+                || m.Equals("mixtral-8x7b-32768", StringComparison.OrdinalIgnoreCase))
+                return "openai/gpt-oss-120b";
+
+            if (m.Equals("llama-3.1-8b-instant", StringComparison.OrdinalIgnoreCase)
+                || m.Equals("llama3-8b-8192", StringComparison.OrdinalIgnoreCase))
+                return "openai/gpt-oss-20b";
+
+            return m;
         }
 
         private static IEnumerable<string> CandidatePaths()

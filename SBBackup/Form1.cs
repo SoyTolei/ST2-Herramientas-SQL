@@ -45,7 +45,7 @@ public partial class Form1 : Form
 
         InitializeComponent();
         UiTheme.ApplyDpiAwareScaling(this);
-        TryApplyWindowIcon();
+        Ui.AppIcon.Apply(this);
         Text = "ST2 · Backup de bases";
         MinimumSize = new Size(880, 420);
         StartPosition = FormStartPosition.CenterScreen;
@@ -55,27 +55,6 @@ public partial class Form1 : Form
         Font = UiTheme.UiFont();
         BackColor = UiTheme.AppBack;
         BuildUi();
-    }
-
-    private void TryApplyWindowIcon()
-    {
-        try
-        {
-            var icoPath = Path.Combine(AppContext.BaseDirectory, "Assets", "app.ico");
-            if (File.Exists(icoPath))
-            {
-                Icon = new Icon(icoPath);
-                return;
-            }
-
-            var fromExe = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-            if (fromExe is not null)
-                Icon = (Icon)fromExe.Clone();
-        }
-        catch
-        {
-            // sin icono personalizado
-        }
     }
 
     private void BuildUi()

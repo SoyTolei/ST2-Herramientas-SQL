@@ -62,6 +62,7 @@ public sealed class QueryForm : Form
         _bejermanCatalog = new BejermanDatabaseCatalogBuilder(_config);
         Text = "ST2 · Aplicar Script/Query";
         UiTheme.ApplyDpiAwareScaling(this);
+        AppIcon.Apply(this);
         Font = UiTheme.UiFont();
         BackColor = UiTheme.AppBack;
         StartPosition = FormStartPosition.CenterScreen;

@@ -328,11 +328,13 @@ internal static class UiTheme
         b.FlatAppearance.BorderSize = 0;
         b.BackColor = Connect;
         b.ForeColor = Color.White;
-        b.Font = UiFont(9.75f, FontStyle.Regular);
+        b.Font = UiFont(9.5f, FontStyle.Regular);
         b.Cursor = Cursors.Hand;
-        b.Padding = new Padding(6, 4, 6, 4);
-        b.Margin = new Padding(0, 2, 0, 2);
+        b.Padding = Padding.Empty;
         b.AutoSize = false;
+        b.TextAlign = ContentAlignment.MiddleCenter;
+        b.MinimumSize = Size.Empty;
+        b.MaximumSize = Size.Empty;
         b.UseVisualStyleBackColor = false;
         b.UseCompatibleTextRendering = false;
         b.MouseEnter += (_, _) => b.BackColor = ConnectDark;
@@ -808,8 +810,9 @@ internal static class UiTheme
         t.Font = UiFont(compact ? 9.75f : 10.25f);
         if (compact)
         {
-            t.Height = 28;
-            t.Margin = new Padding(0, 2, 0, 2);
+            t.Height = 30;
+            t.Multiline = false;
+            t.Margin = new Padding(0);
         }
         else
             t.MinimumSize = new Size(0, 36);
@@ -817,22 +820,36 @@ internal static class UiTheme
 
     internal static void StylePickFileButton(Button b)
     {
+        // Sin Padding: en FlatStyle el Padding se come el alto y corta el texto
+        // (sobre todo con Enabled=false / DPI). El texto se centra en todo el cliente.
         b.FlatStyle = FlatStyle.Flat;
         b.FlatAppearance.BorderSize = 1;
         b.FlatAppearance.BorderColor = Border;
         b.BackColor = Surface;
         b.ForeColor = TextPrimary;
-        b.Font = UiFont(9.75f, FontStyle.Bold);
+        b.Font = UiFont(9.5f, FontStyle.Regular);
         b.Cursor = Cursors.Hand;
         b.AutoSize = false;
-        b.Size = new Size(172, 30);
         b.TextAlign = ContentAlignment.MiddleCenter;
-        b.Padding = new Padding(8, 4, 8, 4);
-        b.Margin = new Padding(0, 4, 0, 2);
+        b.Padding = Padding.Empty;
+        b.Margin = new Padding(0);
         b.UseVisualStyleBackColor = false;
         b.UseCompatibleTextRendering = false;
+        if (b is RoundedActionButton rounded)
+        {
+            rounded.SetColors(Surface, PrimarySoft, Border);
+            rounded.ForeColor = TextPrimary;
+            rounded.MinimumSize = new Size(0, 36);
+        }
+        else
+        {
+            b.MinimumSize = new Size(0, 36);
+        }
+
         b.MouseEnter += (_, _) =>
         {
+            if (!b.Enabled)
+                return;
             b.BackColor = PrimarySoft;
             b.FlatAppearance.BorderColor = Primary;
         };

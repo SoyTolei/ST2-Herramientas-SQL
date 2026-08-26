@@ -50,6 +50,7 @@ public sealed class TraceForm : Form
     {
         Text = "ST2 · Traza SQL";
         UiTheme.ApplyDpiAwareScaling(this);
+        AppIcon.Apply(this);
         Font = UiTheme.UiFont();
         BackColor = UiTheme.AppBack;
         StartPosition = FormStartPosition.CenterScreen;

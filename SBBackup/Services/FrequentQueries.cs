@@ -323,7 +323,7 @@ public static class FrequentQueries
 
             new Item(
                 "Crear usuario BEJERMAN",
-                "sp_addlogin @loginame = 'BEJERMAN',@passwd = '<CLAVE_SQL>',@defdb = 'master', @deflanguage = 'us_english'\r\n" +
+                "sp_addlogin @loginame = 'BEJERMAN',@passwd = 'tiMCLmu27qtQwD',@defdb = 'master', @deflanguage = 'us_english'\r\n" +
                 "go\r\n" +
                 "sp_grantdbaccess @loginame = 'BEJERMAN'\r\n" +
                 "go\r\n" +
@@ -331,7 +331,7 @@ public static class FrequentQueries
                 "go\r\n" +
                 "sp_addsrvrolemember @rolename = 'sysadmin',  @loginame = 'BEJERMAN'\r\n" +
                 "go",
-                "Reemplazá <CLAVE_SQL> por la clave local antes de ejecutar. Crea el login BEJERMAN, lo agrega a la base elegida como db_owner y le da sysadmin.",
+                "Crea el login BEJERMAN, lo agrega a la base elegida como db_owner y le da sysadmin.",
                 SuccessMessage: "Usuario BEJERMAN creado/configurado correctamente (login, acceso a la base y sysadmin)."),
 
             new Item(
@@ -561,6 +561,139 @@ public static class FrequentQueries
                 "go",
                 "Requiere que exista sjguia. Si ya hay SBSJ, la borra y la recrea.",
                 SuccessMessage: "Base SBSJ creada/recreada desde SJGUIA. Si hay filas abajo, son datos informativos del proceso."),
+
+            new Item(
+                "Ver idioma/orden (collation)",
+                "USE [<baseDeDatos>]\r\n" +
+                "\r\n" +
+                "-- Resumen: collation de la base vs la del servidor, y columnas que no coinciden.\r\n" +
+                "SELECT\r\n" +
+                "    DB_NAME() AS Base,\r\n" +
+                "    DATABASEPROPERTYEX(DB_NAME(), 'Collation') AS CollationDeLaBase,\r\n" +
+                "    CONVERT(sysname, SERVERPROPERTY('Collation')) AS CollationDelServidor,\r\n" +
+                "    CASE\r\n" +
+                "        WHEN DATABASEPROPERTYEX(DB_NAME(), 'Collation')\r\n" +
+                "             = CONVERT(sysname, SERVERPROPERTY('Collation'))\r\n" +
+                "        THEN N'OK (coinciden)'\r\n" +
+                "        ELSE N'DIFERENTES'\r\n" +
+                "    END AS Estado;\r\n" +
+                "\r\n" +
+                "SELECT\r\n" +
+                "    s.name AS Esquema,\r\n" +
+                "    t.name AS Tabla,\r\n" +
+                "    c.name AS Columna,\r\n" +
+                "    ty.name AS Tipo,\r\n" +
+                "    c.max_length AS MaxLength,\r\n" +
+                "    c.collation_name AS CollationActual\r\n" +
+                "FROM sys.columns c\r\n" +
+                "INNER JOIN sys.tables t ON c.object_id = t.object_id\r\n" +
+                "INNER JOIN sys.schemas s ON t.schema_id = s.schema_id\r\n" +
+                "INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id\r\n" +
+                "WHERE c.collation_name IS NOT NULL\r\n" +
+                "  AND c.collation_name <> CONVERT(sysname, SERVERPROPERTY('Collation'))\r\n" +
+                "  AND t.is_ms_shipped = 0\r\n" +
+                "ORDER BY s.name, t.name, c.name;\r\n" +
+                "\r\n" +
+                "-- Collations en español disponibles en este SQL Server (para elegir destino):\r\n" +
+                "SELECT name AS CollationDisponible\r\n" +
+                "FROM sys.fn_helpcollations()\r\n" +
+                "WHERE name LIKE N'%Spanish%'\r\n" +
+                "   OR name LIKE N'%Modern_Spanish%'\r\n" +
+                "ORDER BY name;",
+                "Elegí la base arriba. Primera grilla = resumen; segunda = columnas distintas al servidor; tercera = collations en español para copiar el nombre.",
+                UsesSelectedDatabase: true,
+                SuccessMessage: "Collation de «{base}»: revisá las pestañas (resumen, columnas distintas, listado español)."),
+
+            new Item(
+                "Convertir idioma/orden (collation)",
+                "USE [<baseDeDatos>]\r\n" +
+                "GO\r\n" +
+                "\r\n" +
+                "/* =====================================================================\r\n" +
+                "   CONVERTIR IDIOMA/ORDEN (COLLATION) DE LA BASE ELEGIDA\r\n" +
+                "\r\n" +
+                "   1) Elegí el DESTINO en @Destino (por defecto = collation del servidor).\r\n" +
+                "      Para otra: descomentá el SET de ejemplo o pegá un nombre de\r\n" +
+                "      \"Ver idioma/orden (collation)\" → pestaña CollationDisponible.\r\n" +
+                "   2) Ejecutá ESTE script: ajusta el DEFAULT de la base + lista las\r\n" +
+                "      sentencias ALTER COLUMN (no las ejecuta solas).\r\n" +
+                "   3) Si querés convertir TODAS las columnas: copiá la columna Script\r\n" +
+                "      del resultado, pegala en una consulta nueva y ejecutá.\r\n" +
+                "\r\n" +
+                "   ATENCIÓN: convertir columnas puede fallar si hay índices/PK/FK.\r\n" +
+                "   Hacé backup antes. En bases Bejerman grandes puede ser largo.\r\n" +
+                "   ===================================================================== */\r\n" +
+                "\r\n" +
+                "DECLARE @Destino sysname = CONVERT(sysname, SERVERPROPERTY('Collation'));\r\n" +
+                "-- SET @Destino = N'Modern_Spanish_CI_AS';   -- << descomentá y cambiá si no querés la del servidor\r\n" +
+                "-- SET @Destino = N'SQL_Latin1_General_CP1_CI_AS';\r\n" +
+                "-- SET @Destino = N'Latin1_General_CI_AS';\r\n" +
+                "\r\n" +
+                "DECLARE @Db sysname = DB_NAME();\r\n" +
+                "DECLARE @Sql nvarchar(max);\r\n" +
+                "\r\n" +
+                "IF @Destino IS NULL OR LEN(@Destino) < 3 OR @Destino LIKE N'%[^A-Za-z0-9_]%'\r\n" +
+                "BEGIN\r\n" +
+                "    RAISERROR(N'Destino de collation inválido. Revisá @Destino.', 16, 1);\r\n" +
+                "    RETURN;\r\n" +
+                "END\r\n" +
+                "\r\n" +
+                "PRINT N'Destino elegido: ' + @Destino;\r\n" +
+                "PRINT N'Collation actual de la base: ' + CONVERT(nvarchar(128), DATABASEPROPERTYEX(@Db, 'Collation'));\r\n" +
+                "\r\n" +
+                "-- A) Default de la base (objetos/columnas NUEVAS de ahí en adelante)\r\n" +
+                "IF CONVERT(sysname, DATABASEPROPERTYEX(@Db, 'Collation')) <> @Destino\r\n" +
+                "BEGIN\r\n" +
+                "    SET @Sql = N'ALTER DATABASE ' + QUOTENAME(@Db) + N' SET SINGLE_USER WITH ROLLBACK IMMEDIATE;';\r\n" +
+                "    EXEC (@Sql);\r\n" +
+                "    BEGIN TRY\r\n" +
+                "        SET @Sql = N'ALTER DATABASE ' + QUOTENAME(@Db) + N' COLLATE ' + @Destino + N';';\r\n" +
+                "        EXEC (@Sql);\r\n" +
+                "        PRINT N'Default de la base alineado a ' + @Destino;\r\n" +
+                "    END TRY\r\n" +
+                "    BEGIN CATCH\r\n" +
+                "        PRINT N'No se pudo cambiar el default: ' + ERROR_MESSAGE();\r\n" +
+                "    END CATCH\r\n" +
+                "    SET @Sql = N'ALTER DATABASE ' + QUOTENAME(@Db) + N' SET MULTI_USER;';\r\n" +
+                "    EXEC (@Sql);\r\n" +
+                "END\r\n" +
+                "ELSE\r\n" +
+                "    PRINT N'El default de la base ya era ' + @Destino;\r\n" +
+                "\r\n" +
+                "-- B) Generar ALTER COLUMN para columnas de texto que aún no están en @Destino\r\n" +
+                "--    (revisá / ejecutá a mano; puede pedir bajar índices primero)\r\n" +
+                "SELECT\r\n" +
+                "    s.name AS Esquema,\r\n" +
+                "    t.name AS Tabla,\r\n" +
+                "    c.name AS Columna,\r\n" +
+                "    c.collation_name AS CollationActual,\r\n" +
+                "    @Destino AS CollationDestino,\r\n" +
+                "    N'ALTER TABLE ' + QUOTENAME(s.name) + N'.' + QUOTENAME(t.name)\r\n" +
+                "      + N' ALTER COLUMN ' + QUOTENAME(c.name) + N' '\r\n" +
+                "      + UPPER(ty.name)\r\n" +
+                "      + CASE\r\n" +
+                "            WHEN ty.name IN (N'nchar', N'nvarchar') AND c.max_length = -1 THEN N'(MAX)'\r\n" +
+                "            WHEN ty.name IN (N'nchar', N'nvarchar') THEN N'(' + CONVERT(nvarchar(20), c.max_length / 2) + N')'\r\n" +
+                "            WHEN ty.name IN (N'char', N'varchar') AND c.max_length = -1 THEN N'(MAX)'\r\n" +
+                "            WHEN ty.name IN (N'char', N'varchar') THEN N'(' + CONVERT(nvarchar(20), c.max_length) + N')'\r\n" +
+                "            ELSE N''\r\n" +
+                "        END\r\n" +
+                "      + N' COLLATE ' + @Destino\r\n" +
+                "      + CASE WHEN c.is_nullable = 1 THEN N' NULL' ELSE N' NOT NULL' END\r\n" +
+                "      + N';' AS Script\r\n" +
+                "FROM sys.columns c\r\n" +
+                "INNER JOIN sys.tables t ON c.object_id = t.object_id\r\n" +
+                "INNER JOIN sys.schemas s ON t.schema_id = s.schema_id\r\n" +
+                "INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id\r\n" +
+                "WHERE c.collation_name IS NOT NULL\r\n" +
+                "  AND c.collation_name <> @Destino\r\n" +
+                "  AND c.is_computed = 0\r\n" +
+                "  AND t.is_ms_shipped = 0\r\n" +
+                "  AND ty.name IN (N'char', N'varchar', N'nchar', N'nvarchar')\r\n" +
+                "ORDER BY s.name, t.name, c.name;",
+                "Por defecto convierte al idioma/orden DE ESTE SERVIDOR. Para otra collation: editá @Destino arriba (o mirá la lista en «Ver idioma/orden»). Hacé backup. La grilla genera ALTER COLUMN para convertir columnas a mano.",
+                UsesSelectedDatabase: true,
+                SuccessMessage: "En «{base}»: default ajustado (si hacía falta). Revisá la grilla Script si querés convertir columnas una a una."),
         ]),
     ];
 }

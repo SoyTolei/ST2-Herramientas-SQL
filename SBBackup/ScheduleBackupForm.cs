@@ -47,6 +47,7 @@ internal sealed class ScheduleBackupForm : Form
 
         Text = "Programar backups automáticos";
         UiTheme.ApplyDpiAwareScaling(this);
+        AppIcon.Apply(this);
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = true;
         MinimizeBox = false;

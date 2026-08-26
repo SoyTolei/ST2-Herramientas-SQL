@@ -44,6 +44,11 @@ public sealed class RestoreCoordinator
         public string? BackupCollation { get; set; }
         public string? InstanceCollation { get; set; }
         public bool? CollationMatches { get; set; }
+        /// <summary>
+        /// null = no hacía falta; true = se alineó el default de la base a la instancia;
+        /// false = se intentó y falló (restore OK igual).
+        /// </summary>
+        public bool? CollationAligned { get; set; }
     }
 
     public sealed class RestoreProgress
@@ -127,8 +132,12 @@ public sealed class RestoreCoordinator
             if (!string.IsNullOrWhiteSpace(header.Collation) || !string.IsNullOrWhiteSpace(instanceCollation))
             {
                 log.Report(
-                    $"{fileName}: collation backup «{header.Collation ?? "?"}» · instancia «{instanceCollation ?? "?"}» · " +
-                    (matches == true ? "coinciden" : matches == false ? "NO coinciden" : "no se pudo comparar"));
+                    $"{fileName}: idioma/orden backup «{header.Collation ?? "?"}» · servidor «{instanceCollation ?? "?"}» · " +
+                    (matches == true
+                        ? "coinciden"
+                        : matches == false
+                            ? "NO coinciden (se ajustará el default al restaurar)"
+                            : "no se pudo comparar"));
             }
 
             return new RestorePlanItem
@@ -221,6 +230,97 @@ public sealed class RestoreCoordinator
             .ConfigureAwait(false);
         await ClearAdminAndCnvPasswordsAsync(masterConnectionString, item.DatabaseName, log, cancellationToken)
             .ConfigureAwait(false);
+
+        if (item.CollationMatches == false
+            && !string.IsNullOrWhiteSpace(item.InstanceCollation))
+        {
+            item.CollationAligned = await AlignDatabaseDefaultCollationAsync(
+                    conn, item.DatabaseName, item.InstanceCollation!, log, cancellationToken)
+                .ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Cambia solo la collation default de la base a la de la instancia.
+    /// No convierte columnas existentes; afecta objetos/columnas nuevas de ahí en adelante.
+    /// </summary>
+    private static async Task<bool> AlignDatabaseDefaultCollationAsync(
+        SqlConnection masterConn,
+        string databaseName,
+        string targetCollation,
+        IProgress<string> log,
+        CancellationToken cancellationToken)
+    {
+        if (!IsSafeCollationName(targetCollation))
+        {
+            log.Report($"{databaseName}: no se ajustó collation — nombre inválido «{targetCollation}».");
+            return false;
+        }
+
+        var dbEsc = "[" + databaseName.Replace("]", "]]", StringComparison.Ordinal) + "]";
+        var dbLit = databaseName.Replace("'", "''", StringComparison.Ordinal);
+        var collEsc = targetCollation.Trim();
+
+        try
+        {
+            log.Report($"{databaseName}: ajustando collation default de la base a «{collEsc}»…");
+            await ExecAsync(
+                    masterConn,
+                    $"IF DB_ID(N'{dbLit}') IS NOT NULL ALTER DATABASE {dbEsc} SET SINGLE_USER WITH ROLLBACK IMMEDIATE;",
+                    cancellationToken)
+                .ConfigureAwait(false);
+
+            try
+            {
+                await ExecAsync(
+                        masterConn,
+                        $"ALTER DATABASE {dbEsc} COLLATE {collEsc};",
+                        cancellationToken)
+                    .ConfigureAwait(false);
+                log.Report(
+                    $"{databaseName}: collation default alineada a «{collEsc}» " +
+                    "(columnas existentes del backup no se modifican).");
+                return true;
+            }
+            finally
+            {
+                try
+                {
+                    await ExecAsync(
+                            masterConn,
+                            $"IF DB_ID(N'{dbLit}') IS NOT NULL ALTER DATABASE {dbEsc} SET MULTI_USER;",
+                            cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    log.Report($"{databaseName}: aviso al restablecer MULTI_USER tras collation: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            log.Report($"{databaseName}: aviso — no se pudo ajustar collation default: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>Solo letras, dígitos y guión bajo (nombres de collation SQL Server).</summary>
+    private static bool IsSafeCollationName(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return false;
+        var t = name.Trim();
+        if (t.Length is < 3 or > 128)
+            return false;
+        foreach (var c in t)
+        {
+            if (c is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_')
+                continue;
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>
@@ -539,7 +639,8 @@ public sealed class RestoreCoordinator
         if (preview.CollationMatches == false)
         {
             preview.PeekNote =
-                $"Collation distinta: backup «{preview.BackupCollation}» ≠ instancia «{preview.InstanceCollation}».";
+                $"Idioma/orden distinto: backup «{preview.BackupCollation}» ≠ servidor «{preview.InstanceCollation}». " +
+                "Al restaurar se ajusta el default de la base (columnas del backup no se convierten).";
         }
     }
 

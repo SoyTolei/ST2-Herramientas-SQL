@@ -54,30 +54,27 @@ internal static class SqlConnectionHelper
     {
         var list = new List<Attempt>();
 
-        if (BejermanSqlDefaults.HasPassword)
-        {
-            // 1) SQL bejerman + Encrypt Mandatory (entornos modernos)
-            list.Add(new Attempt(
-                "Intentando conexión con usuario SQL (bejerman, cifrado)",
-                "Conectado con usuario SQL (cifrado).",
-                ConnectionStringFactory.Build(
-                    server,
-                    integratedSecurity: false,
-                    BejermanSqlDefaults.User,
-                    BejermanSqlDefaults.Password,
-                    SqlConnectionEncryptOption.Mandatory)));
+        // 1) SQL bejerman + Encrypt Mandatory (entornos modernos)
+        list.Add(new Attempt(
+            "Intentando conexión con usuario SQL (bejerman, cifrado)",
+            "Conectado con usuario SQL (cifrado).",
+            ConnectionStringFactory.Build(
+                server,
+                integratedSecurity: false,
+                BejermanSqlDefaults.User,
+                BejermanSqlDefaults.Password,
+                SqlConnectionEncryptOption.Mandatory)));
 
-            // 2) SQL bejerman + Encrypt Optional (SQL viejo / TLS raro en sucursales)
-            list.Add(new Attempt(
-                "Reintentando usuario SQL (bejerman, cifrado opcional)",
-                "Conectado con usuario SQL (cifrado opcional).",
-                ConnectionStringFactory.Build(
-                    server,
-                    integratedSecurity: false,
-                    BejermanSqlDefaults.User,
-                    BejermanSqlDefaults.Password,
-                    SqlConnectionEncryptOption.Optional)));
-        }
+        // 2) SQL bejerman + Encrypt Optional (SQL viejo / TLS raro en sucursales)
+        list.Add(new Attempt(
+            "Reintentando usuario SQL (bejerman, cifrado opcional)",
+            "Conectado con usuario SQL (cifrado opcional).",
+            ConnectionStringFactory.Build(
+                server,
+                integratedSecurity: false,
+                BejermanSqlDefaults.User,
+                BejermanSqlDefaults.Password,
+                SqlConnectionEncryptOption.Optional)));
 
         // 3) Windows + Mandatory
         list.Add(new Attempt(
