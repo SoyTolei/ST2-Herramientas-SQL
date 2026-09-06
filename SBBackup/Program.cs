@@ -18,6 +18,11 @@ static class Program
 
         Application.SetCompatibleTextRenderingDefault(false);
         ApplicationConfiguration.Initialize();
+
+        using var login = new LoginForm();
+        if (login.ShowDialog() != DialogResult.OK)
+            return;
+
         Application.Run(new HomeForm());
     }
 

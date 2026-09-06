@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using SBBackup.Ui;
 
 namespace SBBackup;
@@ -430,6 +431,123 @@ internal static class UiTheme
         g.FillRectangle(brush, rect);
         using var stripe = new SolidBrush(HeaderAccentStripe);
         g.FillRectangle(stripe, 0, 0, 5, rect.Height);
+    }
+
+    internal static int ScaledAppHeaderHeight(Control scaleRef) => Scale(scaleRef, AppHeaderHeight);
+
+    /// <summary>Header naranja con título ST2, subtítulo y opcionalmente el icono de la app.</summary>
+    internal static Panel CreateAppBrandedHeader(Control scaleRef, string subtitle, bool showIcon = false)
+    {
+        var header = new Panel
+        {
+            BackColor = AppBack,
+            Padding = new Padding(Scale(scaleRef, 16), 0, Scale(scaleRef, 18), 0)
+        };
+        header.Paint += (_, e) => PaintAppHeaderBackground(e.Graphics, header.ClientRectangle);
+
+        var row = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = showIcon ? 2 : 1,
+            RowCount = 1,
+            BackColor = Color.Transparent
+        };
+
+        var titleColumn = showIcon ? 1 : 0;
+        if (showIcon)
+        {
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, Scale(scaleRef, 40)));
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+
+            var iconPx = Scale(scaleRef, 26);
+            var iconHost = new PictureBox
+            {
+                Size = new Size(iconPx, iconPx),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BackColor = Color.Transparent
+            };
+            var iconImage = CreateHeaderIconImage(scaleRef, 26);
+            if (iconImage is not null)
+                iconHost.Image = iconImage;
+
+            var iconCell = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+            iconCell.Controls.Add(iconHost);
+            CenterChildInParent(iconCell, iconHost);
+            row.Controls.Add(iconCell, 0, 0);
+        }
+        else
+        {
+            row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+        }
+
+        var titles = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = Color.Transparent,
+            Margin = new Padding(Scale(scaleRef, showIcon ? 2 : 0), 0, 0, 0)
+        };
+        titles.RowStyles.Add(new RowStyle(SizeType.Percent, 55f));
+        titles.RowStyles.Add(new RowStyle(SizeType.Percent, 45f));
+        titles.Controls.Add(new Label
+        {
+            Text = "ST2",
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.BottomLeft,
+            ForeColor = Color.White,
+            Font = UiFont(18f, FontStyle.Bold),
+            BackColor = Color.Transparent
+        }, 0, 0);
+        titles.Controls.Add(new Label
+        {
+            Text = subtitle,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.TopLeft,
+            ForeColor = Color.FromArgb(255, 220, 200),
+            Font = UiFont(9.25f),
+            BackColor = Color.Transparent
+        }, 0, 1);
+
+        row.Controls.Add(titles, titleColumn, 0);
+        header.Controls.Add(row);
+        return header;
+    }
+
+    internal static Image? CreateHeaderIconImage(Control scaleRef, int logicalSize)
+    {
+        var icon = AppIcon.Get();
+        if (icon is null)
+            return null;
+
+        var px = Scale(scaleRef, logicalSize);
+        using var sized = new Icon(icon, new Size(px, px));
+        var bmp = new Bitmap(px, px, PixelFormat.Format32bppArgb);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            g.Clear(Color.Transparent);
+            ConfigureCrispGraphics(g, scaleRef, curves: px >= Scale(scaleRef, 24));
+            g.DrawIcon(sized, new Rectangle(0, 0, px, px));
+        }
+
+        return bmp;
+    }
+
+    private static void CenterChildInParent(Control parent, Control child)
+    {
+        void Center()
+        {
+            if (parent.ClientSize.Width <= 0 || parent.ClientSize.Height <= 0)
+                return;
+
+            child.Left = Math.Max(0, (parent.ClientSize.Width - child.Width) / 2);
+            child.Top = Math.Max(0, (parent.ClientSize.Height - child.Height) / 2);
+        }
+
+        parent.Resize += (_, _) => Center();
+        parent.HandleCreated += (_, _) => Center();
+        if (parent.IsHandleCreated)
+            Center();
     }
 
     internal static Panel CreateAlertBanner(string title, string body, Color accent, Color bg, Color fg)

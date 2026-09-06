@@ -302,7 +302,18 @@ public sealed class EjeExerciseLinkService
                 continue;
 
             var emp = row.EmpCode?.Trim();
-            if (string.IsNullOrEmpty(emp) || !empKeys.Contains(emp))
+            if (string.IsNullOrEmpty(emp))
+                continue;
+
+            var empMatches = empKeys.Contains(emp);
+            if (!empMatches)
+            {
+                // Prefijo de la base FACI0031 vs emp_codigo FACI (igualdad, no StartsWith suelto).
+                empMatches = empFromDb.Length > 0
+                             && emp.Equals(empFromDb, StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (!empMatches)
                 continue;
 
             var score = ScoreNumberMatch(row, exerciseDigits);
@@ -333,8 +344,12 @@ public sealed class EjeExerciseLinkService
         return new EjeDatabaseLink(best.EmpCode?.Trim(), best.Descrip);
     }
 
-    private static readonly Regex PrefixAndDigits = new(
-        @"^(?<prefix>[A-Za-z][A-Za-z0-9_]*)(?<digits>\d+)$",
+    private static readonly Regex PrefixAndFourDigits = new(
+        @"^(?<prefix>.+[A-Za-z_])(?<digits>\d{4})$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static readonly Regex PrefixAndTrailingDigits = new(
+        @"^(?<prefix>.+[A-Za-z_])(?<digits>\d+)$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex TrailingDigits = new(@"\d+$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -343,7 +358,21 @@ public sealed class EjeExerciseLinkService
     {
         empPrefix = "";
         exerciseDigits = "";
-        var m = PrefixAndDigits.Match(physicalName.Trim());
+        var name = physicalName.Trim();
+        if (name.Length == 0)
+            return false;
+
+        // Bejerman usa casi siempre 4 dígitos (FACI0031 → FACI + 0031).
+        // El patrón antiguo [A-Za-z0-9_]*\d+$ dejaba FACI003 + 1 y no encontraba eje_nroeje.
+        var m4 = PrefixAndFourDigits.Match(name);
+        if (m4.Success)
+        {
+            empPrefix = m4.Groups["prefix"].Value.Trim();
+            exerciseDigits = m4.Groups["digits"].Value.Trim();
+            return empPrefix.Length > 0 && exerciseDigits.Length == 4;
+        }
+
+        var m = PrefixAndTrailingDigits.Match(name);
         if (!m.Success)
             return false;
 

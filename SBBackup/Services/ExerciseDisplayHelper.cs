@@ -38,6 +38,11 @@ internal static class ExerciseDisplayHelper
         if (baseMatch.Success && int.TryParse(baseMatch.Groups[1].Value, out var baseN))
             return baseN;
 
+        // FACI0031 / PRUEBA0001 → 31 / 1
+        var four = Regex.Match(db, @"(\d{4})$");
+        if (four.Success && int.TryParse(four.Groups[1].Value, out var fourN))
+            return fourN;
+
         return null;
     }
 }

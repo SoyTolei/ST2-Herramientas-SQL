@@ -9,12 +9,11 @@ namespace SBBackup.Services;
 /// </summary>
 public static class SbdaPrefixExerciseLinker
 {
-    private static readonly Regex SbdaBody = new(@"^(?i)SBDA(.+)$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex SbdaBody = new(@"^(?i)SBD[AP](.+)$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ExerciseSuffix = new(@"^(?i)(.+)(\d{4})$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
-    /// Agrega filas para bases online que sigan el patrón ejercicio y reutilicen el prefijo de una base SBDA ya presente.
-    /// Debe ejecutarse cuando las filas SBDA ya tengan resuelto <see cref="ServerDatabaseRow.FriendlyName"/> / <see cref="ServerDatabaseRow.MatchedEmpCode"/> si aplica.
+    /// Agrega o enriquece filas de ejercicio vinculadas al prefijo de una base SBDA ya presente.
     /// </summary>
     public static int AppendMatchingExerciseDatabases(List<ServerDatabaseRow> rows, IReadOnlySet<string> onlineSet)
     {
@@ -32,17 +31,20 @@ public static class SbdaPrefixExerciseLinker
             var prefix = m.Groups[1].Value.Trim();
             if (prefix.Length == 0)
                 continue;
-            prefixToSbdaTemplate.TryAdd(prefix, row);
+
+            // Preferir SBDA sobre SBDP si aparecen las dos.
+            if (!prefixToSbdaTemplate.TryGetValue(prefix, out var existing) ||
+                (existing.PhysicalName.StartsWith("SBDP", StringComparison.OrdinalIgnoreCase)
+                 && row.PhysicalName.StartsWith("SBDA", StringComparison.OrdinalIgnoreCase)))
+                prefixToSbdaTemplate[prefix] = row;
         }
 
         if (prefixToSbdaTemplate.Count == 0)
             return 0;
 
+        var enriched = 0;
         foreach (var db in onlineSet)
         {
-            if (byName.ContainsKey(db))
-                continue;
-
             var m = ExerciseSuffix.Match(db);
             if (!m.Success)
                 continue;
@@ -53,6 +55,22 @@ public static class SbdaPrefixExerciseLinker
 
             if (!prefixToSbdaTemplate.TryGetValue(prefix, out var template))
                 continue;
+
+            if (byName.TryGetValue(db, out var existing))
+            {
+                // Ya estaba en el listado: igual heredar emp/razón de la SBDA (para resolver EJE).
+                if (string.IsNullOrEmpty(existing.MatchedEmpCode) && !string.IsNullOrEmpty(template.MatchedEmpCode))
+                {
+                    existing.MatchedEmpCode = template.MatchedEmpCode;
+                    enriched++;
+                }
+
+                if (string.IsNullOrWhiteSpace(existing.FriendlyName) && !string.IsNullOrWhiteSpace(template.FriendlyName))
+                    existing.FriendlyName = template.FriendlyName;
+
+                existing.IsSbdaLinkedExercise = true;
+                continue;
+            }
 
             var added = new ServerDatabaseRow
             {
@@ -67,6 +85,6 @@ public static class SbdaPrefixExerciseLinker
             byName[db] = added;
         }
 
-        return rows.Count - before;
+        return rows.Count - before + enriched;
     }
 }

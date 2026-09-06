@@ -378,12 +378,15 @@ public sealed class HomeForm : Form
             var elapsed = DateTime.UtcNow - _connectStartedAt;
             var detalle = attemptedSteps.Count > 0
                 ? string.Join("\n", attemptedSteps)
-                : ex.Message;
-            MessageBox.Show(this,
-                UserMessageSpanish.FriendlyError("No se pudo conectar al servidor SQL.", ex)
-                    + $"\n\nTiempo transcurrido: {elapsed.TotalSeconds:0.0} s"
-                    + "\n\nPasos intentados:\n" + detalle,
-                Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                : "";
+            var cuerpo = SqlConnectionHelper.IsInstanceResolutionFailure(ex)
+                ? (ex.GetBaseException().Message.Trim() +
+                   "\n\nDetalle técnico:\n" + UserMessageSpanish.ShortTechnical(ex))
+                : UserMessageSpanish.FriendlyError("No se pudo conectar al servidor SQL.", ex);
+            if (!string.IsNullOrWhiteSpace(detalle))
+                cuerpo += "\n\nPasos intentados:\n" + detalle;
+            cuerpo += $"\n\nTiempo transcurrido: {elapsed.TotalSeconds:0.0} s";
+            MessageBox.Show(this, cuerpo, Text, MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally
         {

@@ -24,7 +24,7 @@ internal static class SqlConnectionProbe
             {
                 throw;
             }
-            catch (Exception ex) when (i == 0 && LooksLikeTransientPreLogin(ex))
+            catch (Exception ex) when (i == 0 && LooksLikeTransientPreLogin(ex) && !SqlConnectionHelper.IsInstanceResolutionFailure(ex))
             {
                 last = ex;
                 await Task.Delay(400, cancellationToken).ConfigureAwait(false);

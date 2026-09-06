@@ -209,6 +209,26 @@ internal static class CardSection
         return card;
     }
 
+    /// <summary>Tarjeta compacta que crece con el contenido (p. ej. login).</summary>
+    public static Panel CreateInlineBarTop(Control content, Padding? padding = null, Padding? margin = null)
+    {
+        var card = new Panel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = UiTheme.Surface,
+            Padding = padding ?? new Padding(12, 10, 12, 12),
+            Margin = margin ?? Padding.Empty
+        };
+        card.Paint += PaintCardBorder;
+        content.Dock = DockStyle.Top;
+        content.AutoSize = true;
+        content.BackColor = Color.Transparent;
+        card.Controls.Add(content);
+        return card;
+    }
+
     private static void PaintCardBorder(object? sender, PaintEventArgs e)
     {
         if (sender is not Panel panel)

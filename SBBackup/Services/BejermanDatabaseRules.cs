@@ -252,7 +252,15 @@ internal static class BejermanDatabaseRules
             var descrip = ejeCatalog.ResolveDescrip(n, row.MatchedEmpCode);
             if (!string.IsNullOrEmpty(descrip))
                 return descrip;
-            return "";
+
+            // Si EJE no resolvió, al menos mostrar el Nº inferido del nombre de la base.
+            var sortN = ExerciseDisplayHelper.ResolveSortNumber(null, n);
+            if (sortN is null
+                && System.Text.RegularExpressions.Regex.Match(n, @"(\d{4})$") is { Success: true } m
+                && int.TryParse(m.Groups[1].Value, out var padded))
+                sortN = padded;
+
+            return sortN is null ? "" : $"Ejercicio {sortN.Value}";
         }
 
         var friendly = (row.FriendlyName ?? "").Trim();

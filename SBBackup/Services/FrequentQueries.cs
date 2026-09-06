@@ -323,7 +323,7 @@ public static class FrequentQueries
 
             new Item(
                 "Crear usuario BEJERMAN",
-                "sp_addlogin @loginame = 'BEJERMAN',@passwd = 'tiMCLmu27qtQwD',@defdb = 'master', @deflanguage = 'us_english'\r\n" +
+                "sp_addlogin @loginame = 'BEJERMAN',@passwd = '<CLAVE_SQL>',@defdb = 'master', @deflanguage = 'us_english'\r\n" +
                 "go\r\n" +
                 "sp_grantdbaccess @loginame = 'BEJERMAN'\r\n" +
                 "go\r\n" +
@@ -331,7 +331,7 @@ public static class FrequentQueries
                 "go\r\n" +
                 "sp_addsrvrolemember @rolename = 'sysadmin',  @loginame = 'BEJERMAN'\r\n" +
                 "go",
-                "Crea el login BEJERMAN, lo agrega a la base elegida como db_owner y le da sysadmin.",
+                "Reemplazá <CLAVE_SQL> por la clave local antes de ejecutar. Crea el login BEJERMAN, lo agrega a la base elegida como db_owner y le da sysadmin.",
                 SuccessMessage: "Usuario BEJERMAN creado/configurado correctamente (login, acceso a la base y sysadmin)."),
 
             new Item(

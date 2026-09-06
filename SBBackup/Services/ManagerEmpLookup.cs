@@ -68,16 +68,26 @@ public sealed class ManagerEmpLookup(AppConfig config)
 
     public static (string Code, string Raz)? TryMatchEmp(string databaseName, IReadOnlyList<(string CodeKey, string Raz)> emps)
     {
+        (string Code, string Raz)? best = null;
+        var bestLen = -1;
+
         foreach (var (code, raz) in emps)
         {
             if (string.IsNullOrEmpty(code))
                 continue;
 
-            if (DatabaseMatchesCode(databaseName, code))
-                return (code.Trim(), raz.Trim());
+            if (!DatabaseMatchesCode(databaseName, code))
+                continue;
+
+            // El código más largo gana (FACI antes que FA), para no cruzar empresas.
+            if (code.Length > bestLen)
+            {
+                bestLen = code.Length;
+                best = (code.Trim(), raz.Trim());
+            }
         }
 
-        return null;
+        return best;
     }
 
     public static string? TryGetRazsocForEmpCode(IReadOnlyList<(string CodeKey, string Raz)> emps, string empCode)
