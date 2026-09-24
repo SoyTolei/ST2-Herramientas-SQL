@@ -15,17 +15,16 @@ public static class ConnectionStringFactory
         SqlConnectionEncryptOption? encrypt = null,
         int connectTimeoutSeconds = DefaultConnectTimeoutSeconds)
     {
+        var dataSource = NormalizeDataSource(server);
         var b = new SqlConnectionStringBuilder
         {
-            DataSource = NormalizeDataSource(server),
+            DataSource = dataSource,
             IntegratedSecurity = integratedSecurity,
             TrustServerCertificate = true,
             Encrypt = encrypt ?? SqlConnectionEncryptOption.Mandatory,
             ConnectTimeout = Math.Clamp(connectTimeoutSeconds, 5, 90),
-            // Si el DNS devuelve varias IPs (típico en redes de sucursal / VLAN),
-            // evita quedarse colgado en la primera IP muerta durante el pre-login.
-            MultiSubnetFailover = true,
-            // La prueba de conexión no debe dejar una entrada mala en el pool.
+            // Solo con TCP: en local (shared memory / pipes) SqlClient lanza ArgumentException.
+            MultiSubnetFailover = UsesTcpProtocol(dataSource),
             Pooling = true
         };
 
@@ -36,6 +35,16 @@ public static class ConnectionStringFactory
         }
 
         return b.ConnectionString;
+    }
+
+    private static bool UsesTcpProtocol(string dataSource)
+    {
+        if (dataSource.StartsWith("tcp:", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Sin prefijo: SqlClient usa TCP en remoto; en local puede ser shared memory.
+        // MultiSubnetFailover solo es válido con TCP explícito o remoto forzado a tcp:.
+        return false;
     }
 
     /// <summary>

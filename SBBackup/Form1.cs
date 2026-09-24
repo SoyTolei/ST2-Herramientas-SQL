@@ -30,6 +30,7 @@ public partial class Form1 : Form
     private bool _pinningManager;
     private TableLayoutPanel? _rootLayout;
     private Panel? _gridShell;
+    private CancellationTokenSource? _lifetimeCts;
 
     private sealed record EmpresaOption(string? Code, string Label)
     {
@@ -54,6 +55,16 @@ public partial class Form1 : Form
         MinimizeBox = true;
         Font = UiTheme.UiFont();
         BackColor = UiTheme.AppBack;
+        _lifetimeCts = new CancellationTokenSource();
+        FormClosing += (_, _) =>
+        {
+            try { _lifetimeCts?.Cancel(); } catch { /* ignore */ }
+        };
+        FormClosed += (_, _) =>
+        {
+            _lifetimeCts?.Dispose();
+            _lifetimeCts = null;
+        };
         BuildUi();
     }
 
@@ -736,6 +747,9 @@ public partial class Form1 : Form
 
     private async Task LoadDatabasesAsync()
     {
+        if (IsDisposed || !IsHandleCreated)
+            return;
+
         if (!AppSession.IsConnected || string.IsNullOrEmpty(AppSession.ConnectionString))
         {
             SetConnectionStatus(false, null);
@@ -744,6 +758,7 @@ public partial class Form1 : Form
 
         _connectionString = AppSession.ConnectionString;
         SetConnectionStatus(true, AppSession.ServerName);
+        var ct = _lifetimeCts?.Token ?? CancellationToken.None;
 
         try
         {
@@ -756,12 +771,20 @@ public partial class Form1 : Form
             _rows.Clear();
 
             var server = AppSession.ServerName ?? "";
-            var progress = new Progress<string>(AppendLog);
+            var progress = new Progress<string>(msg =>
+            {
+                if (!IsDisposed && IsHandleCreated)
+                    AppendLog(msg);
+            });
             AppendLog("Listando bases Bejerman (sin master, model, msdb ni tempdb)…");
 
             var list = await _bejermanCatalog
-                .LoadAsync(_connectionString, progress, CancellationToken.None)
+                .LoadAsync(_connectionString, progress, ct)
                 .ConfigureAwait(true);
+
+            if (IsDisposed || !IsHandleCreated || ct.IsCancellationRequested)
+                return;
+
             _rows.AddRange(list);
 
             var mgrName = ManagerDbName();
@@ -783,27 +806,46 @@ public partial class Form1 : Form
             SetConnectionStatus(true, server);
             AppendLog($"Se listaron {_rows.Count} bases. Listo para respaldar.");
         }
+        catch (OperationCanceledException)
+        {
+            // Ventana cerrada mientras cargaba: no mostrar error.
+        }
         catch (Exception ex)
         {
+            if (IsDisposed || !IsHandleCreated)
+                return;
+
             SetConnectionStatus(false, null);
-            MessageBox.Show(
-                this,
-                UserMessageSpanish.FriendlyError(
-                    "No se pudo armar el listado de bases. Revisá la conexión y volvé a conectar desde la pantalla principal.",
-                    ex),
-                Text,
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-            AppendLog("ERROR: " + ex);
+            try
+            {
+                MessageBox.Show(
+                    this,
+                    UserMessageSpanish.FriendlyError(
+                        "No se pudo armar el listado de bases. Revisá la conexión y volvé a conectar desde la pantalla principal.",
+                        ex),
+                    Text,
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Form cerrado entre el check y el Show.
+            }
+
+            if (!IsDisposed && IsHandleCreated)
+                AppendLog("ERROR: " + ex);
         }
         finally
         {
-            _suspendEmpresaFilter = false;
+            if (!IsDisposed)
+                _suspendEmpresaFilter = false;
         }
     }
 
     private void SetConnectionStatus(bool connected, string? server)
     {
+        if (IsDisposed || !IsHandleCreated)
+            return;
         UiTheme.SetConnectionStatusLabel(_lblConnStatus, connected, server);
     }
 

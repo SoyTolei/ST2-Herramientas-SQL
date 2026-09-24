@@ -126,7 +126,7 @@ public sealed class RestoreForm : Form
 
         _lblCount = new Label
         {
-            Text = "Elegí la o las bases (.bak) a restaurar.",
+            Text = "Elegí bases (.bak). Podés sumar más desde otras carpetas.",
             Dock = DockStyle.Fill,
             AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft,
@@ -537,7 +537,7 @@ public sealed class RestoreForm : Form
 
         using var dlg = new OpenFileDialog
         {
-            Title = "Seleccioná los archivos .bak a restaurar",
+            Title = "Seleccioná los archivos .bak a restaurar (se suman a la lista)",
             Filter = "Backups SQL Server (*.bak)|*.bak|Todos los archivos (*.*)|*.*",
             Multiselect = true,
             CheckFileExists = true
@@ -545,27 +545,39 @@ public sealed class RestoreForm : Form
         if (dlg.ShowDialog(this) != DialogResult.OK)
             return;
 
-        _files.Clear();
-        _files.AddRange(dlg.FileNames);
-        await RefreshFilePreviewsAsync().ConfigureAwait(true);
-    }
-
-    private async Task RefreshFilePreviewsAsync()
-    {
-        _filePreviews.Clear();
-        _gridFiles.Rows.Clear();
-        _btnRestore.Enabled = false;
-
-        if (_files.Count == 0)
+        var toAdd = new List<string>();
+        var duplicates = 0;
+        foreach (var path in dlg.FileNames)
         {
-            _lblCount.Text = "Elegí los archivos .bak a restaurar.";
+            if (_files.Any(f => string.Equals(f, path, StringComparison.OrdinalIgnoreCase)))
+            {
+                duplicates++;
+                continue;
+            }
+
+            toAdd.Add(path);
+        }
+
+        if (toAdd.Count == 0)
+        {
+            _lblCount.Text = duplicates > 0
+                ? "Esos archivos ya estaban en la lista."
+                : "Ningún archivo nuevo para agregar.";
+            _lblCount.ForeColor = UiTheme.TextMuted;
             return;
         }
 
-        _lblCount.Text = $"Analizando {_files.Count} archivo(s)…";
+        _files.AddRange(toAdd);
+        await AppendFilePreviewsAsync(toAdd).ConfigureAwait(true);
+    }
+
+    private async Task AppendFilePreviewsAsync(IReadOnlyList<string> newPaths)
+    {
+        _btnRestore.Enabled = false;
+        _lblCount.Text = $"Analizando {newPaths.Count} archivo(s) nuevo(s)…";
         SetRestoreStatus("Leyendo metadatos del backup…");
 
-        foreach (var path in _files)
+        foreach (var path in newPaths)
         {
             RestoreCoordinator.RestoreFilePreview preview;
             if (!string.IsNullOrEmpty(_connectionString))
@@ -582,6 +594,11 @@ public sealed class RestoreForm : Form
             _filePreviews.Add(preview);
         }
 
+        UpdateFilesListUi();
+    }
+
+    private void UpdateFilesListUi()
+    {
         PopulateFilesGrid();
         PinManagerRowFirst();
         RenumberGridRows();
